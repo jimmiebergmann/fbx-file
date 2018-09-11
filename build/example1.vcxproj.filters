@@ -1,0 +1,24 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="fbx">
+      <UniqueIdentifier>{e651c398-7512-4e0e-893a-d20e4bc22af1}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\fbx.cpp">
+      <Filter>fbx</Filter>
+    </ClCompile>
+    <ClCompile Include="..\miniz.c">
+      <Filter>fbx</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\fbx.hpp">
+      <Filter>fbx</Filter>
+    </ClInclude>
+    <ClInclude Include="..\miniz.h">
+      <Filter>fbx</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>
