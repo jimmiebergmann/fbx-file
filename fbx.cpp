@@ -2,13 +2,21 @@
 #include <memory>
 #include <stack>
 #include <fstream>
+#include <sstream>
 #include "miniz.h"
 
 namespace fbx
 {
 
     static void CheckOverflow(const size_t size, size_t & pos, const size_t max);
+    template<typename T> static void ToString(std::string & output, const T & in);
     static const std::string g_EmptyString = "";
+    static std::string g_TempString = "";
+    static const std::string g_TypeStrings[13] =
+    {
+        "Boolean", "Integer16", "Integer32", "Integer64", "Float32", "Float64", "BooleanArray",
+        "Integer32Array", "Integer64Array", "Float32Array", "Float64Array", "String", "Raw"
+    };
 
 
     // Property
@@ -127,11 +135,49 @@ namespace fbx
 
     const std::string & Property::asString() const
     {
-        if (m_Type == Type::String)
+        switch (m_Type)
         {
+        case Type::String:
             return *m_Value.m_pString;
+        case Type::Raw:
+            g_TempString = "Raw"; return g_TempString;
+        case Type::Boolean:
+            ToString(g_TempString, m_Value.m_Boolean); return g_TempString;
+        case Type::Integer16:
+            ToString(g_TempString, m_Value.m_Integer16); return g_TempString;
+        case Type::Integer32:
+            ToString(g_TempString, m_Value.m_Integer32); return g_TempString;
+        case Type::Integer64:
+            ToString(g_TempString, m_Value.m_Integer64); return g_TempString;
+        case Type::Float32:
+            ToString(g_TempString, m_Value.m_Float32); return g_TempString;
+        case Type::Float64:
+            ToString(g_TempString, m_Value.m_Float64); return g_TempString;
+        case Type::BooleanArray:
+            g_TempString = "Array(Boolean)"; return g_TempString;
+        case Type::Integer32Array:
+            g_TempString = "Array(Integer32)"; return g_TempString;
+        case Type::Integer64Array:
+            g_TempString = "Array(Integer64)"; return g_TempString;
+        case Type::Float32Array:
+            g_TempString = "Array(Float32)"; return g_TempString;
+        case Type::Float64Array:
+            g_TempString = "Array(Float64)"; return g_TempString;
+        default:
+            break;
         }
+
         return g_EmptyString;
+    }
+
+    std::string Property::typeString() const
+    {
+        return g_TypeStrings[static_cast<size_t>(m_Type)];
+    }
+
+    std::string Property::typeString(const Type type)
+    {
+        return g_TypeStrings[static_cast<size_t>(type)];
     }
 
     const uint8_t * Property::asRaw() const
@@ -949,5 +995,13 @@ namespace fbx
         }
 
         pos += size;
+    }
+
+    template<typename T>
+    void ToString(std::string & output, const T & in)
+    {
+        std::stringstream ss;
+        ss << in;
+        output = ss.str();
     }
 }

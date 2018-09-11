@@ -57,6 +57,10 @@ namespace fbx
         const std::string & asString() const;
         const uint8_t * asRaw() const;
 
+        std::string typeString() const;
+        static std::string typeString(const Type type);
+        
+
     private:
 
         friend class Record;
