@@ -12,6 +12,7 @@
     <ClCompile Include="..\miniz.c">
       <Filter>fbx</Filter>
     </ClCompile>
+    <ClCompile Include="..\examples\example1.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\fbx.hpp">

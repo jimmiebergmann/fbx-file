@@ -5,7 +5,7 @@
 #include <map>
 #include <vector>
 
-namespace fbx
+namespace Fbx
 {
 
     class Record;
@@ -25,16 +25,13 @@ namespace fbx
             Integer64,
             Float32,
             Float64,
-
             BooleanArray,
             Integer32Array,
             Integer64Array,
             Float32Array,
             Float64Array,
-
             String,
             Raw
-
         };
 
         Type type() const;
@@ -59,7 +56,6 @@ namespace fbx
 
         std::string typeString() const;
         static std::string typeString(const Type type);
-        
 
     private:
 
@@ -72,39 +68,36 @@ namespace fbx
         Property(Record * record, const int64_t value);
         Property(Record * record, const float value);
         Property(Record * record, const double value);
+        Property(Record * record, const bool * value, const uint32_t size);
+        Property(Record * record, const int32_t * value, const uint32_t size);
+        Property(Record * record, const int64_t * value, const uint32_t size);
+        Property(Record * record, const float * value, const uint32_t size);
+        Property(Record * record, const double * value, const uint32_t size);
         Property(Record * record, const std::string & value);
+        Property(Record * record, const uint8_t * value, const uint32_t size); // Raw.
 
-        Property(Record * record, const bool * value, const size_t size);
-        Property(Record * record, const int32_t * value, const size_t size);
-        Property(Record * record, const int64_t * value, const size_t size);
-        Property(Record * record, const float * value, const size_t size);
-        Property(Record * record, const double * value, const size_t size);
-
-        Property(Record * record, const uint8_t * value, const size_t size); // Raw.
         ~Property();
 
-        Type        m_Type;
-        uint32_t    m_Size;
+        Type        m_type;
+        uint32_t    m_size;
         Record *    m_pRecord;
 
         union
         {
-            bool        m_Boolean;
-            int16_t     m_Integer16;
-            int32_t     m_Integer32;
-            int64_t     m_Integer64;
-            float       m_Float32;
-            double      m_Float64;
-
-            bool *      m_pBooleanArray;
-            int32_t *   m_pInteger32Array;
-            int64_t *   m_pInteger64Array;
-            float *     m_pFloat32Array;
-            double *    m_pFloat64Array;
-
+            bool            m_boolean;
+            int16_t         m_integer16;
+            int32_t         m_integer32;
+            int64_t         m_integer64;
+            float           m_float32;
+            double          m_float64;
+            bool *          m_pBooleanArray;
+            int32_t *       m_pInteger32Array;
+            int64_t *       m_pInteger64Array;
+            float *         m_pFloat32Array;
+            double *        m_pFloat64Array;
             std::string *   m_pString;
             uint8_t *       m_pRaw;
-        } m_Value;
+        } m_value;
 
     };
 
@@ -115,18 +108,19 @@ namespace fbx
     public:
 
         const std::string & name() const;
-        size_t size() const;
-        Property * at(const size_t index) const;
-        template<typename T> Property * push_back(const T value)
+        void setName(const std::string & name);
+        size_t propertyCount() const;
+        Property * property(const size_t index) const;
+        template<typename T> Property * pushBack(const T value)
         {
             Property * prop = new Property(this, value);
-            m_Properties.push_back(prop);
+            m_properties.push_back(prop);
             return prop;
         }
-        template<typename T> Property * push_back(const T * value, const size_t size)
+        template<typename T> Property * pushBack(const T * value, const uint32_t size)
         {
             Property * prop = new Property(this, value, size);
-            m_Properties.push_back(prop);
+            m_properties.push_back(prop);
             return prop;
         }
 
@@ -142,8 +136,8 @@ namespace fbx
         Record(RecordList * parent, const std::string & name);
         ~Record();
 
-        std::string             m_Name;
-        std::vector<Property*>  m_Properties;
+        std::string             m_name;
+        std::vector<Property*>  m_properties;
         RecordList *            m_pParentList;
         RecordList *            m_pChildList;
         Record *                m_pPrevRecord;
@@ -160,23 +154,27 @@ namespace fbx
         RecordList(const std::string & filename);
         ~RecordList();
 
-        Record * push_back(const std::string & name);
-        Record * push_front(const std::string & name);
-        //bool erase(Record * record
-        void clear();
+        void read(const std::string & filename);
+        void write(const std::string & filename) const;
 
         size_t size() const;
         Record * front() const;
         Record * back() const;
         Record * find(const std::string & name) const;
 
-        void read(const std::string & filename);
-        void write(const std::string & filename) const;
+        Record * pushBack(const std::string & name);
+        Record * pushFront(const std::string & name);
+        //bool erase(Record * record
+        void clear();
+
+        void setRecordName(Record * record, const std::string & name);
 
     private:
 
-        std::multimap<std::string, Record *>    m_RecordMap;
-        std::list<Record *>                     m_RecordList;
+        RecordList(const RecordList & recordList);
+
+        std::multimap<std::string, Record *>    m_recordMap;
+        std::list<Record *>                     m_recordList;
 
     };
 

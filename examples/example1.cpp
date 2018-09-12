@@ -2,19 +2,19 @@
 #include <iostream>
 #include <functional>
 
-void printRecords(fbx::RecordList & records, size_t level = 0)
+void printRecords(Fbx::RecordList & records, size_t level = 0)
 {
-    for (fbx::Record * rec = records.front(); rec != nullptr; rec = rec->next())
+    for (Fbx::Record * rec = records.front(); rec != nullptr; rec = rec->next())
     {
         std::cout << std::string(level * 3, ' ') << "Rec: " << rec->name() << std::endl;
 
-        for (size_t i = 0; i < rec->size(); i++)
+        for (size_t i = 0; i < rec->propertyCount(); i++)
         {
-            fbx::Property * prop = rec->at(i);
+            Fbx::Property * prop = rec->property(i);
             std::cout << std::string((level + 1) * 3, ' ') << "Prop - " << prop->typeString() << ": " << prop->asString() << std::endl;
         }
 
-        fbx::RecordList * pChildList = rec->childList();
+        Fbx::RecordList * pChildList = rec->childList();
         if (pChildList)
         {
             printRecords(*pChildList, level + 1);
@@ -25,23 +25,23 @@ void printRecords(fbx::RecordList & records, size_t level = 0)
 int main()
 {
 
-    fbx::RecordList file;
+    Fbx::RecordList file;
     file.read("../models/blender-default.fbx");
 
     printRecords(file);
 
-    fbx::Record * objects = file.find("Objects");
+    Fbx::Record * objects = file.find("Objects");
     if (objects && objects->childList())
     {
-        fbx::Record * geometry = objects->childList()->find("Geometry");
+        Fbx::Record * geometry = objects->childList()->find("Geometry");
 
         if (geometry && geometry->childList())
         {
-            fbx::Record * vertices = geometry->childList()->find("Vertices");
-            if (vertices && vertices->size())
+            Fbx::Record * vertices = geometry->childList()->find("Vertices");
+            if (vertices && vertices->propertyCount())
             {
-                fbx::Property * vertexArray = vertices->at(0);
-                if (vertexArray->type() == fbx::Property::Type::Float64Array &&
+                Fbx::Property * vertexArray = vertices->property(0);
+                if (vertexArray->type() == Fbx::Property::Type::Float64Array &&
                     vertexArray->size() % 3 == 0)
                 {
                     double * vertexData = vertexArray->asFloat64Array();
