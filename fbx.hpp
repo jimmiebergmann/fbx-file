@@ -1,21 +1,54 @@
-#pragma once
+/*
+* MIT License
+*
+* Copyright(c) 2018 Jimmie Bergmann
+*
+* Permission is hereby granted, free of charge, to any person obtaining a copy
+* of this software and associated documentation files(the "Software"), to deal
+* in the Software without restriction, including without limitation the rights
+* to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+* copies of the Software, and to permit persons to whom the Software is
+* furnished to do so, subject to the following conditions :
+*
+* The above copyright notice and this permission notice shall be included in all
+* copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.IN NO EVENT SHALL THE
+* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+* SOFTWARE.
+*
+*/
+
+#ifndef FBX_HPP_GUARD
+#define FBX_HPP_GUARD
 
 #include <string>
 #include <list>
 #include <map>
 #include <vector>
+#include <fstream>
 
 namespace Fbx
 {
-
-    class Record;
-    class RecordList;
-
 
     class Property
     {
 
     public:
+
+        union Value
+        {
+            bool    boolean;
+            int16_t integer16;
+            int32_t integer32;
+            int64_t integer64;
+            float   float32;
+            double  float64;
+        };
 
         enum class Type
         {
@@ -34,70 +67,73 @@ namespace Fbx
             Raw
         };
 
+        Property(const bool primitive);
+        Property(const int16_t primitive);
+        Property(const int32_t primitive);
+        Property(const int64_t primitive);
+        Property(const float primitive);
+        Property(const double primitive);
+        Property(const bool * array, const uint32_t count);
+        Property(const int32_t * array, const uint32_t count);
+        Property(const int64_t * array, const uint32_t count);
+        Property(float * array, const uint32_t count);
+        Property(const double * array, const uint32_t count);
+        Property(const std::string & string);
+        Property(const uint8_t * raw, const uint32_t size);
+
         Type type() const;
+        uint8_t code() const;
+        Value & primitive();
+        const Value & primitive() const;
+        std::vector<Value> & array();
+        const std::vector<Value> & array() const;
+        std::string string() const;
+        std::vector<uint8_t> & raw();
+        const std::vector<uint8_t> & raw() const;
         uint32_t size() const;
-        Record * record() const;
 
-        bool asBoolean() const;
-        int16_t asInteger16() const;
-        int32_t asInteger32() const;
-        int64_t asInteger64() const;
-        float asFloat32() const;
-        double asFloat64() const;
-
-        bool * asBooleanArray() const;
-        int32_t * asInteger32Array() const;
-        int64_t * asInteger64Array() const;
-        float * asFloat32Array() const;
-        double * asFloat64Array() const;
-
-        const std::string & asString() const;
-        const uint8_t * asRaw() const;
-
-        std::string typeString() const;
-        static std::string typeString(const Type type);
+        bool isPrimitive() const;
+        bool isArray() const;
+        bool isString() const;
+        bool isRaw() const;
 
     private:
 
-        friend class Record;
-        friend class RecordList;
+        Type                    m_type;
+        Value                   m_primitive;
+        std::vector<Value>      m_array;
+        std::vector<uint8_t>    m_raw;
 
-        Property(Record * record, const bool value);
-        Property(Record * record, const int16_t value);
-        Property(Record * record, const int32_t value);
-        Property(Record * record, const int64_t value);
-        Property(Record * record, const float value);
-        Property(Record * record, const double value);
-        Property(Record * record, const bool * value, const uint32_t size);
-        Property(Record * record, const int32_t * value, const uint32_t size);
-        Property(Record * record, const int64_t * value, const uint32_t size);
-        Property(Record * record, const float * value, const uint32_t size);
-        Property(Record * record, const double * value, const uint32_t size);
-        Property(Record * record, const std::string & value);
-        Property(Record * record, const uint8_t * value, const uint32_t size); // Raw.
+    };
 
-        ~Property();
 
-        Type        m_type;
-        uint32_t    m_size;
-        Record *    m_pRecord;
+    class PropertyList
+    {
 
-        union
-        {
-            bool            m_boolean;
-            int16_t         m_integer16;
-            int32_t         m_integer32;
-            int64_t         m_integer64;
-            float           m_float32;
-            double          m_float64;
-            bool *          m_pBooleanArray;
-            int32_t *       m_pInteger32Array;
-            int64_t *       m_pInteger64Array;
-            float *         m_pFloat32Array;
-            double *        m_pFloat64Array;
-            std::string *   m_pString;
-            uint8_t *       m_pRaw;
-        } m_value;
+    public:
+
+        typedef std::list<Property *>::iterator Iterator;
+        typedef std::list<Property *>::const_iterator ConstIterator;
+
+        PropertyList();
+        ~PropertyList();
+
+        size_t size() const;
+        Iterator insert(Property * property);
+        Iterator insert(Iterator position, Property * property);
+        Iterator begin();
+        ConstIterator begin() const;
+        Iterator end();
+        ConstIterator end() const;
+        Iterator erase(Property * property);
+        Iterator erase(Iterator position);
+        void clear();
+
+    private:
+
+        PropertyList(PropertyList &);
+
+        std::list<Property *> m_properties;
 
     };
 
@@ -107,75 +143,86 @@ namespace Fbx
 
     public:
 
-        const std::string & name() const;
-        void setName(const std::string & name);
-        size_t propertyCount() const;
-        Property * property(const size_t index) const;
-        template<typename T> Property * pushBack(const T value)
-        {
-            Property * prop = new Property(this, value);
-            m_properties.push_back(prop);
-            return prop;
-        }
-        template<typename T> Property * pushBack(const T * value, const uint32_t size)
-        {
-            Property * prop = new Property(this, value, size);
-            m_properties.push_back(prop);
-            return prop;
-        }
+        typedef std::list<Record *>::iterator Iterator;
+        typedef std::list<Record *>::const_iterator ConstIterator;
 
-        RecordList * parentList() const;
-        RecordList * childList() const;
-        Record * prev() const;
-        Record * next() const;
-
-    private:
-
-        friend class RecordList;
-
-        Record(RecordList * parent, const std::string & name);
+        Record();
+        Record(const std::string & name);
+        Record(const std::string & name, Record * parent);
         ~Record();
 
-        std::string             m_name;
-        std::vector<Property*>  m_properties;
-        RecordList *            m_pParentList;
-        RecordList *            m_pChildList;
-        Record *                m_pPrevRecord;
-        Record *                m_pNextRecord;
+        const std::string & name() const;
+        void name(const std::string & name);
+        Record * parent();
+        const Record * parent() const;
+        void parent(Record * parent);
+        PropertyList & properties();
+        const PropertyList & properties() const;
+
+        size_t size() const;
+        Iterator insert(Record * record);
+        Iterator insert(Iterator position, Record * record);
+        Iterator begin();
+        ConstIterator begin() const;
+        Iterator end();
+        ConstIterator end() const;
+        Iterator find(const std::string & name);
+        ConstIterator find(const std::string & name) const;
+        Iterator erase(Record * record);
+        Iterator erase(Iterator position);
+        void clear();
+
+    private:
+        
+        Record(const Record &);
+
+        std::string         m_name;
+        Record *            m_pParent;
+        PropertyList        m_properties;
+        std::list<Record *> m_nestedList;
 
     };
 
-    class RecordList
+
+    class File
     {
 
     public:
 
-        RecordList();
-        RecordList(const std::string & filename);
-        ~RecordList();
+        typedef std::list<Record *>::iterator Iterator;
+        typedef std::list<Record *>::const_iterator ConstIterator;
+
+        File();
+        ~File();
 
         void read(const std::string & filename);
         void write(const std::string & filename) const;
 
+        uint32_t version() const;
+        void version(const uint32_t version);
+
         size_t size() const;
-        Record * front() const;
-        Record * back() const;
-        Record * find(const std::string & name) const;
-
-        Record * pushBack(const std::string & name);
-        Record * pushFront(const std::string & name);
-        //bool erase(Record * record
+        Iterator insert(Record * record);
+        Iterator insert(Iterator position, Record * record);
+        Iterator begin();
+        ConstIterator begin() const;
+        Iterator end();
+        ConstIterator end() const;
+        Iterator find(const std::string & name);
+        ConstIterator find(const std::string & name) const;
+        Iterator erase(Record * record);
+        Iterator erase(Iterator position);
         void clear();
-
-        void setRecordName(Record * record, const std::string & name);
 
     private:
 
-        RecordList(const RecordList & recordList);
+        File(File &);
 
-        std::multimap<std::string, Record *>    m_recordMap;
-        std::list<Record *>                     m_recordList;
+        uint32_t            m_version;
+        std::list<Record *> m_records;
 
     };
 
 }
+
+#endif

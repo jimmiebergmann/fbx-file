@@ -1,67 +1,44 @@
 #include "../fbx.hpp"
 #include <iostream>
-#include <functional>
+#include <chrono>
 
-void printRecords(Fbx::RecordList & records, size_t level = 0)
+void printRecord(const Fbx::Record * record, size_t level = 0)
 {
-    for (Fbx::Record * rec = records.front(); rec != nullptr; rec = rec->next())
+    std::cout << std::string(level * 3, ' ') << "Rec: " << record->name() << std::endl;
+
+    for (auto p : record->properties())
     {
-        std::cout << std::string(level * 3, ' ') << "Rec: " << rec->name() << std::endl;
+        std::cout << std::string((level + 1) * 3, ' ') << "Prop - " << p->code() << ": " << p->string() << std::endl;
+    }
+    for (auto r : *record)
+    {
+        printRecord(r, level + 1);
+    }
+}
 
-        for (size_t i = 0; i < rec->propertyCount(); i++)
-        {
-            Fbx::Property * prop = rec->property(i);
-            std::cout << std::string((level + 1) * 3, ' ') << "Prop - " << prop->typeString() << ": " << prop->asString() << std::endl;
-        }
-
-        Fbx::RecordList * pChildList = rec->childList();
-        if (pChildList)
-        {
-            printRecords(*pChildList, level + 1);
-        }
+void printFile(const Fbx::File & file)
+{
+    for(auto r : file)
+    {
+        printRecord(r);
     }
 }
 
 int main()
 {
+    Fbx::File file;
 
-    Fbx::RecordList file;
+    auto t_start = std::chrono::high_resolution_clock::now();
+        
     file.read("../models/blender-default.fbx");
 
-    printRecords(file);
+    auto t_now = std::chrono::high_resolution_clock::now();
+    std::chrono::milliseconds elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(t_now - t_start);
+    std::cout << "Read time: " << elapsed.count() << "ms." << std::endl;
 
-    Fbx::Record * objects = file.find("Objects");
-    if (objects && objects->childList())
-    {
-        Fbx::Record * geometry = objects->childList()->find("Geometry");
+   // file.write("../bin/out-model.fbx");
 
-        if (geometry && geometry->childList())
-        {
-            Fbx::Record * vertices = geometry->childList()->find("Vertices");
-            if (vertices && vertices->propertyCount())
-            {
-                Fbx::Property * vertexArray = vertices->property(0);
-                if (vertexArray->type() == Fbx::Property::Type::Float64Array &&
-                    vertexArray->size() % 3 == 0)
-                {
-                    double * vertexData = vertexArray->asFloat64Array();
-
-                    size_t vCount = vertexArray->size() / 3;
-                    for (size_t i = 0; i < vCount; i++)
-                    {
-                        double x = vertexData[i * 3 + 0];
-                        double y = vertexData[i * 3 + 1];
-                        double z = vertexData[i * 3 + 2];
-
-                        std::cout << x << ",  " << y << ",  " << z << ",  " << std::endl;
-                    }
-
-                }
-            }
-        }
-    }
-
+    printFile(file);
 
     return 0;
-
 }

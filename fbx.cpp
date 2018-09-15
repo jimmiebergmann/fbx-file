@@ -1,1030 +1,900 @@
+/*
+* MIT License
+*
+* Copyright(c) 2018 Jimmie Bergmann
+*
+* Permission is hereby granted, free of charge, to any person obtaining a copy
+* of this software and associated documentation files(the "Software"), to deal
+* in the Software without restriction, including without limitation the rights
+* to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+* copies of the Software, and to permit persons to whom the Software is
+* furnished to do so, subject to the following conditions :
+*
+* The above copyright notice and this permission notice shall be included in all
+* copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.IN NO EVENT SHALL THE
+* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+* SOFTWARE.
+*
+*/
+
 #include "fbx.hpp"
 #include <memory>
 #include <stack>
-#include <fstream>
 #include <sstream>
+#include <limits>
+#include <iostream>
 #include "miniz.h"
 
 namespace Fbx
 {
 
-    static void CheckOverflow(const size_t size, size_t & pos, const size_t max);
-    template<typename T> static void ToString(std::string & output, const T & in);
-    static const std::string g_EmptyString = "";
-    static std::string g_TempString = "";
-    static const std::string g_TypeStrings[13] =
-    {
-        "Boolean", "Integer16", "Integer32", "Integer64", "Float32", "Float64", "BooleanArray",
-        "Integer32Array", "Integer64Array", "Float32Array", "Float64Array", "String", "Raw"
-    };
+    /* static const std::string g_typeStrings[13] =
+     {
+         "Boolean", "Integer16", "Integer32", "Integer64", "Float32", "Float64", "BooleanArray",
+         "Integer32Array", "Integer64Array", "Float32Array", "Float64Array", "String", "Raw"
+     };
 
+     static const uint8_t g_typeCodes[13] =
+     {
+         'C', 'Y', 'I', 'L', 'F', 'D', 'b', 'i', 'l', 'f', 'd', 'S', 'R'
+     };*/
 
     // Property
+    Property::Property(const bool primitive) :
+        m_type(Type::Boolean)
+    {
+        m_primitive.boolean = primitive;
+    }
+
+    Property::Property(const int16_t primitive) :
+        m_type(Type::Integer16)
+    {
+        m_primitive.integer16 = primitive;
+    }
+
+    Property::Property(const int32_t primitive) :
+        m_type(Type::Integer64)
+    {
+        m_primitive.integer32 = primitive;
+    }
+
+    Property::Property(const int64_t primitive) :
+        m_type(Type::Integer64)
+    {
+        m_primitive.integer64 = primitive;
+    }
+
+    Property::Property(const float primitive) :
+        m_type(Type::Boolean)
+    {
+        m_primitive.float32 = primitive;
+    }
+
+    Property::Property(const double primitive) :
+        m_type(Type::Boolean)
+    {
+        m_primitive.float64 = primitive;
+    }
+
+    Property::Property(const bool * array, const uint32_t count) :
+        m_type(Type::BooleanArray)
+    {
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            Value value;
+            value.boolean = array[i];
+            m_array.push_back(value);
+        }
+    }
+
+    Property::Property(const int32_t * array, const uint32_t count) :
+        m_type(Type::Integer32Array)
+    {
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            Value value;
+            value.integer32 = array[i];
+            m_array.push_back(value);
+        }
+    }
+
+    Property::Property(const int64_t * array, const uint32_t count) :
+        m_type(Type::Integer64Array)
+    {
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            Value value;
+            value.integer64 = array[i];
+            m_array.push_back(value);
+        }
+    }
+
+    Property::Property(float * array, const uint32_t count) :
+        m_type(Type::Float32Array)
+    {
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            Value value;
+            value.float32 = array[i];
+            m_array.push_back(value);
+        }
+    }
+
+    Property::Property(const double * array, const uint32_t count) :
+        m_type(Type::Float64Array)
+    {
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            Value value;
+            value.float64 = array[i];
+            m_array.push_back(value);
+        }
+    }
+
+    Property::Property(const std::string & p_string) :
+        m_type(Type::String),
+        m_raw(p_string.c_str(), p_string.c_str() + p_string.size())
+    {
+    }
+
+    Property::Property(const uint8_t * p_raw, const uint32_t size) :
+        m_type(Type::Raw),
+        m_raw(p_raw, p_raw + size)
+    {
+    }
+
     Property::Type Property::type() const
     {
         return m_type;
     }
 
+    uint8_t Property::code() const
+    {
+        /*'C', 'Y', 'I', 'L', 'F', 'D', 'b', 'i', 'l', 'f', 'd', 'S', 'R'*/
+        return "CYILFDbilfdSR"[static_cast<size_t>(m_type)];
+    }
+
     uint32_t Property::size() const
     {
-        return m_size;
-    }
-
-    Record * Property::record() const
-    {
-        return m_pRecord;
-    }
-
-    bool Property::asBoolean() const
-    {
-        if (m_type == Type::Boolean)
+        switch (m_type)
         {
-            return m_value.m_boolean;
+            case Type::Boolean: return 1;
+            case Type::Integer16: return 2;
+            case Type::Integer32:
+            case Type::Float32: return 4;
+            case Type::Integer64:
+            case Type::Float64: return 8;
+            case Type::BooleanArray: return static_cast<uint32_t>(m_array.size());
+            case Type::Integer32Array:
+            case Type::Float32Array: return static_cast<uint32_t>(m_array.size()) * 4;
+            case Type::Integer64Array:
+            case Type::Float64Array: return static_cast<uint32_t>(m_array.size()) * 8;
+            case Type::String:
+            case Type::Raw: return static_cast<uint32_t>(m_raw.size());
+            default: break;
         }
-        return false;
-    }
 
-    int16_t Property::asInteger16() const
-    {
-        if (m_type == Type::Integer16)
-        {
-            return m_value.m_integer16;
-        }
-        return 0;
-    }
-    int32_t Property::asInteger32() const
-    {
-        if (m_type == Type::Integer32)
-        {
-            return m_value.m_integer32;
-        }
         return 0;
     }
 
-    int64_t Property::asInteger64() const
+    Property::Value & Property::primitive()
     {
-        if (m_type == Type::Integer64)
-        {
-            return m_value.m_integer64;
-        }
-        return 0;
+        return m_primitive;
+    }
+    const Property::Value & Property::primitive() const
+    {
+        return m_primitive;
     }
 
-    float Property::asFloat32() const
+    std::vector<Property::Value> & Property::array()
     {
-        if (m_type == Type::Float32)
-        {
-            return m_value.m_float32;
-        }
-        return 0.0f;
+        return m_array;
+    }
+    const std::vector<Property::Value> & Property::array() const
+    {
+        return m_array;
     }
 
-    double Property::asFloat64() const
-    {
-        if (m_type == Type::Float64)
-        {
-            return m_value.m_float64;
-        }
-        return 0.0f;
-    }
-
-    bool * Property::asBooleanArray() const
-    {
-        if (m_type == Type::BooleanArray)
-        {
-            return m_value.m_pBooleanArray;
-        }
-        return nullptr;
-    }
-
-    int32_t * Property::asInteger32Array() const
-    {
-        if (m_type == Type::Integer32Array)
-        {
-            return m_value.m_pInteger32Array;
-        }
-        return nullptr;
-    }
-
-    int64_t * Property::asInteger64Array() const
-    {
-        if (m_type == Type::Integer64Array)
-        {
-            return m_value.m_pInteger64Array;
-        }
-        return nullptr;
-    }
-
-    float * Property::asFloat32Array() const
-    {
-        if (m_type == Type::Float32Array)
-        {
-            return m_value.m_pFloat32Array;
-        }
-        return nullptr;
-    }
-
-    double * Property::asFloat64Array() const
-    {
-        if (m_type == Type::Float64Array)
-        {
-            return m_value.m_pFloat64Array;
-        }
-        return nullptr;
-    }
-
-    const std::string & Property::asString() const
+    std::string Property::string() const
     {
         switch (m_type)
         {
-        case Type::String:
-            return *m_value.m_pString;
-        case Type::Raw:
-            g_TempString = "Raw"; return g_TempString;
-        case Type::Boolean:
-            ToString(g_TempString, m_value.m_boolean); return g_TempString;
-        case Type::Integer16:
-            ToString(g_TempString, m_value.m_integer16); return g_TempString;
-        case Type::Integer32:
-            ToString(g_TempString, m_value.m_integer32); return g_TempString;
-        case Type::Integer64:
-            ToString(g_TempString, m_value.m_integer64); return g_TempString;
-        case Type::Float32:
-            ToString(g_TempString, m_value.m_float32); return g_TempString;
-        case Type::Float64:
-            ToString(g_TempString, m_value.m_float64); return g_TempString;
-        case Type::BooleanArray:
-            g_TempString = "Array(Boolean)"; return g_TempString;
-        case Type::Integer32Array:
-            g_TempString = "Array(Integer32)"; return g_TempString;
-        case Type::Integer64Array:
-            g_TempString = "Array(Integer64)"; return g_TempString;
-        case Type::Float32Array:
-            g_TempString = "Array(Float32)"; return g_TempString;
-        case Type::Float64Array:
-            g_TempString = "Array(Float64)"; return g_TempString;
-        default:
-            break;
+            case Type::Boolean: return m_primitive.boolean ? "true" : "false";
+            case Type::Integer16: return std::to_string(m_primitive.integer16);
+            case Type::Integer32: return std::to_string(m_primitive.integer32);
+            case Type::Integer64: return std::to_string(m_primitive.integer64);
+            case Type::Float32: return std::to_string(m_primitive.float32);
+            case Type::Float64: return std::to_string(m_primitive.float64);
+            case Type::BooleanArray: return "array(boolean)";
+            case Type::Integer32Array: return "array(integer32)";
+            case Type::Integer64Array: return "array(integer64)";
+            case Type::Float32Array: return "array(float32)";
+            case Type::Float64Array: return "array(float64)";
+            case Type::String:
+            case Type::Raw: return std::string(m_raw.begin(), m_raw.end());
+            default: break;
         }
 
-        return g_EmptyString;
+        return "";
     }
 
-    std::string Property::typeString() const
+    std::vector<uint8_t> & Property::raw()
     {
-        return g_TypeStrings[static_cast<size_t>(m_type)];
+        return m_raw;
+    }
+    const std::vector<uint8_t> & Property::raw() const
+    {
+        return m_raw;
     }
 
-    std::string Property::typeString(const Type type)
+    bool Property::isPrimitive() const
     {
-        return g_TypeStrings[static_cast<size_t>(type)];
+        return m_type >= Type::Boolean && m_type <= Type::Float64;
     }
 
-    const uint8_t * Property::asRaw() const
+    bool Property::isArray() const
     {
-        if (m_type == Type::Raw)
+        return m_type >= Type::BooleanArray && m_type <= Type::Float64Array;
+    }
+
+    bool Property::isString() const
+    {
+        return m_type == Type::String;
+    }
+
+    bool Property::isRaw() const
+    {
+        return m_type == Type::Raw;
+    }
+
+
+    // Property list
+    PropertyList::PropertyList()
+    {
+
+    }
+
+    PropertyList::~PropertyList()
+    {
+        for (auto it = m_properties.begin(); it != m_properties.end(); ++it)
         {
-            return m_value.m_pRaw;
+            delete *it;
         }
-        return nullptr;
     }
 
-
-    Property::Property(Record * record, const bool value) :
-        m_type(Type::Boolean),
-        m_size(1),
-        m_pRecord(record)
+    size_t PropertyList::size() const
     {
-        m_value.m_boolean = value;
+        return m_properties.size();
     }
 
-    Property::Property(Record * record, const int16_t value) :
-        m_type(Type::Integer16),
-        m_size(2),
-        m_pRecord(record)
+    PropertyList::Iterator PropertyList::insert(Property * p)
     {
-        m_value.m_integer16 = value;
+        return m_properties.insert(m_properties.end(), p);
+    }
+    PropertyList::Iterator PropertyList::insert(Iterator position, Property * p)
+    {
+        return m_properties.insert(position, p);
     }
 
-    Property::Property(Record * record, const int32_t value) :
-        m_type(Type::Integer32),
-        m_size(4),
-        m_pRecord(record)
+    PropertyList::Iterator PropertyList::begin()
     {
-        m_value.m_integer32 = value;
+        return m_properties.begin();
     }
-    
-    Property::Property(Record * record, const int64_t value) :
-        m_type(Type::Integer64),
-        m_size(8),
-        m_pRecord(record)
+    PropertyList::ConstIterator PropertyList::begin() const
     {
-        m_value.m_integer64 = value;
+        return m_properties.begin();
     }
 
-    Property::Property(Record * record, const float value) :
-        m_type(Type::Float32),
-        m_size(4),
-        m_pRecord(record)
+    PropertyList::Iterator PropertyList::end()
     {
-        m_value.m_float32 = value;
+        return m_properties.end();
+    }
+    PropertyList::ConstIterator PropertyList::end() const
+    {
+        return m_properties.end();
     }
 
-    Property::Property(Record * record, const double value) :
-        m_type(Type::Float64),
-        m_size(8),
-        m_pRecord(record)
+    PropertyList::Iterator PropertyList::erase(Property * property)
     {
-        m_value.m_float64 = value;
+        return m_properties.end();
+    }
+    PropertyList::Iterator PropertyList::erase(Iterator position)
+    {
+        return m_properties.end();
     }
 
-    Property::Property(Record * record, const bool * value, const uint32_t size) :
-        m_type(Type::BooleanArray),
-        m_size(size),
-        m_pRecord(record)
+    void PropertyList::clear()
     {
-        if (size)
+        for (auto it = m_properties.begin(); it != m_properties.end(); ++it)
         {
-            m_value.m_pBooleanArray = new bool[size];
-            if (value)
-            {
-                memcpy(m_value.m_pBooleanArray, value, size);
-            }
+            delete *it;
         }
+        m_properties.clear();
     }
 
-    Property::Property(Record * record, const int32_t * value, const uint32_t size) :
-        m_type(Type::Integer32Array),
-        m_size(size),
-        m_pRecord(record)
+    PropertyList::PropertyList(PropertyList & pl)
     {
-        if (size)
+    }
+
+
+    // Record class.
+    Record::Record() :
+        m_name(""),
+        m_pParent(nullptr)
+    {
+    }
+
+    Record::Record(const std::string & p_name) :
+        Record()
+    {
+        name(p_name);
+    }
+
+    Record::Record(const std::string & name, Record * parent) :
+        Record(name)
+    {
+        if (parent != nullptr)
         {
-            m_value.m_pInteger32Array = new int32_t[size];
-            if (value)
-            {
-                memcpy(m_value.m_pInteger32Array, value, size * sizeof(int32_t));
-            }
+            parent->insert(this);
         }
     }
 
-    Property::Property(Record * record, const int64_t * value, const uint32_t size) :
-        m_type(Type::Integer64Array),
-        m_size(size),
-        m_pRecord(record)
+    Record::~Record()
     {
-        if (size)
+        for (auto it = m_nestedList.begin(); it != m_nestedList.end(); ++it)
         {
-            m_value.m_pInteger64Array = new int64_t[size];
-            if (value)
-            {
-                memcpy(m_value.m_pInteger64Array, value, size * sizeof(int64_t));
-            }
+            delete *it;
         }
     }
 
-    Property::Property(Record * record, const float * value, const uint32_t size) :
-        m_type(Type::Float32Array),
-        m_size(size),
-        m_pRecord(record)
-    {
-        if (size)
-        {
-            m_value.m_pFloat32Array = new float[size];
-            if (value)
-            {
-                memcpy(m_value.m_pFloat32Array, value, size * sizeof(float));
-            }
-        }
-    }
-
-    Property::Property(Record * record, const double * value, const uint32_t size) :
-        m_type(Type::Float64Array),
-        m_size(size),
-        m_pRecord(record)
-    {
-        if (size)
-        {
-            m_value.m_pFloat64Array = new double[size];
-            if (value)
-            {
-                memcpy(m_value.m_pFloat64Array, value, size * sizeof(double));
-            }
-        }
-    }
-
-    Property::Property(Record * record, const std::string & value) :
-        m_type(Type::String),
-        m_size(static_cast<uint32_t>(value.size())),
-        m_pRecord(record)
-    {
-        m_value.m_pString = new std::string;
-        *m_value.m_pString = value;
-    }
-
-    Property::Property(Record * record, const uint8_t * value, const uint32_t size) :
-        m_type(Type::Raw),
-        m_size(size),
-        m_pRecord(record)
-    {
-        if (size)
-        {
-            m_value.m_pRaw = new uint8_t[size];
-            if(value)
-            {
-                memcpy(m_value.m_pRaw, value, size);
-            }
-        }
-    }
-
-    Property::~Property()
-    {
-        switch (m_type)
-        {
-        case Type::String:
-            delete m_value.m_pString;
-            break;
-        case Type::BooleanArray:
-            if (m_value.m_pBooleanArray) { delete[] m_value.m_pBooleanArray; }
-            break;
-        case Type::Integer32Array:
-            if (m_value.m_pInteger32Array) { delete[] m_value.m_pInteger32Array; }
-            break;
-        case Type::Integer64Array:
-            if (m_value.m_pInteger64Array) { delete[] m_value.m_pInteger64Array; }
-            break;
-        case Type::Float32Array:
-            if (m_value.m_pFloat32Array) { delete[] m_value.m_pFloat32Array; }
-            break;
-        case Type::Float64Array:
-            if (m_value.m_pFloat64Array) { delete[] m_value.m_pFloat64Array; }
-            break;
-        case Type::Raw:
-            if (m_value.m_pRaw) { delete[] m_value.m_pRaw; }
-            break;
-        default:
-            break;
-        }
-    }
-
-
-
-    // Record
     const std::string & Record::name() const
     {
         return m_name;
     }
 
-    void Record::setName(const std::string & name)
+    void Record::name(const std::string & name)
     {
-        m_pParentList->setRecordName(this, name);
-    }
-
-    size_t Record::propertyCount() const
-    {
-        return m_properties.size();
-    }
-
-    Property * Record::property(const size_t index) const
-    {
-        return m_properties.at(index);
-    }
-
-    RecordList * Record::parentList() const
-    {
-        return m_pParentList;
-    }
-
-    RecordList * Record::childList() const
-    {
-        return m_pChildList;
-    }
-
-    Record * Record::prev() const
-    {
-        return m_pPrevRecord;
-    }
-
-    Record * Record::next() const
-    {
-        return m_pNextRecord;
-    }
-
-    Record::Record(RecordList * parent, const std::string & p_name) :
-        m_name(""),
-        m_pParentList(parent),
-        m_pChildList(nullptr),
-        m_pPrevRecord(nullptr),
-        m_pNextRecord(nullptr)
-    {
-        if (p_name.size() > 255)
+        if (name.size() > 255)
         {
-            throw std::runtime_error("Invalid record name.");
+            throw std::runtime_error("Exceeded record name length limit: " + std::to_string(name.size()));
         }
-        m_name = p_name;
+        m_name = name;   
     }
 
-    Record::~Record()
+    Record * Record::parent()
     {
-        if (m_pChildList)
+        return m_pParent;
+    }
+    const Record * Record::parent() const
+    {
+        return m_pParent;
+    }
+
+    void Record::parent(Record * parent)
+    {
+        if (parent == m_pParent)
         {
-            delete m_pChildList;
+            return;
+        }
+        if (parent == this)
+        {
+            throw std::runtime_error("parent == this.");
+        }
+        if (parent != nullptr)
+        {
+            parent->insert(this);
         }
     }
 
-
-    RecordList::RecordList()
+    PropertyList & Record::properties()
     {
-
+        return m_properties;
+    }
+    const PropertyList & Record::properties() const
+    {
+        return m_properties;
     }
 
-    RecordList::RecordList(const std::string & filename)
+    size_t Record::size() const
     {
-        read(filename);
+        return m_nestedList.size();
     }
 
-    RecordList::~RecordList()
+    Record::Iterator Record::insert(Record * record)
     {
-        for (auto it = m_recordList.begin(); it != m_recordList.end(); it++)
+        Record * pParent = record->parent();
+        if (pParent)
+        {
+            pParent->erase(record);
+        }
+
+        record->m_pParent = this;
+        return m_nestedList.insert(m_nestedList.end(), record);
+    }
+
+    Record::Iterator Record::insert(Iterator position, Record * record)
+    {
+        Record * pParent = record->parent();
+        if (pParent)
+        {
+            pParent->erase(record);
+        }
+
+        record->m_pParent = this;
+        return m_nestedList.insert(position, record);
+    }
+
+    Record::Iterator Record::begin()
+    {
+        return m_nestedList.begin();
+    }
+    Record::ConstIterator Record::begin() const
+    {
+        return m_nestedList.begin();
+    }
+
+    Record::Iterator Record::end()
+    {
+        return m_nestedList.end();
+    }
+    Record::ConstIterator Record::end() const
+    {
+        return m_nestedList.end();
+    }
+
+    Record::Iterator Record::find(const std::string & p_name)
+    {
+        for (auto it = m_nestedList.begin(); it != m_nestedList.end(); it++)
+        {
+            if ((*it)->name() == p_name)
+            {
+                return it;
+            }
+        }
+        return m_nestedList.end();
+    }
+    Record::ConstIterator Record::find(const std::string & p_name) const
+    {
+        for (auto it = m_nestedList.begin(); it != m_nestedList.end(); it++)
+        {
+            if ((*it)->name() == p_name)
+            {
+                return it;
+            }
+        }
+        return m_nestedList.end();
+    }
+
+    Record::Iterator Record::erase(Record * record)
+    {
+        return m_nestedList.end();
+    }
+
+    Record::Iterator Record::erase(Iterator position)
+    {
+        return m_nestedList.end();
+    }
+
+    void Record::clear()
+    {
+        for (auto it = m_nestedList.begin(); it != m_nestedList.end(); ++it)
+        {
+            delete *it;
+        }
+        m_nestedList.clear();
+    }
+
+    Record::Record(const Record & record)
+    {
+    }
+
+
+    // File class.
+    File::File() :
+        m_version(7400)
+    {
+    }
+
+    File::~File()
+    {
+        for (auto it = m_records.begin(); it != m_records.end(); ++it)
         {
             delete *it;
         }
     }
 
-    void RecordList::read(const std::string & filename)
+    // Helper class for reading properties.
+    namespace
     {
-        std::ifstream fin(filename, std::ifstream::binary);
-        if (fin.is_open() == false)
+        class PropertyReader
+        {
+
+        public:
+
+            PropertyReader(std::ifstream & file, Record * record) :
+                m_file(file),
+                m_pRecord(record)
+            {}
+
+            size_t readPrimitive(uint8_t code) const
+            {
+                switch (code)
+                {
+                    case 'C': return readPrimitiveValue<bool>();
+                    case 'Y': return readPrimitiveValue<int16_t>();
+                    case 'I': return readPrimitiveValue<int32_t>();
+                    case 'L': return readPrimitiveValue<int64_t>();
+                    case 'F': return readPrimitiveValue<float>();
+                    case 'D': return readPrimitiveValue<double>();
+                    default: throw std::runtime_error("Unkown primitive property type:" + code); break;
+                }
+                return 0;
+            }
+
+            size_t readArray(uint8_t code) const
+            {
+                uint32_t arrayLength;
+                uint32_t encoding;
+                uint32_t compressedLength;
+                m_file.read(reinterpret_cast<char*>(&arrayLength), 4);
+                m_file.read(reinterpret_cast<char*>(&encoding), 4);
+                m_file.read(reinterpret_cast<char*>(&compressedLength), 4);
+
+                if (encoding == 0)
+                {
+                    switch (code)
+                    {
+                    case 'i': return readUncompressedArray<int32_t>(arrayLength);
+                    case 'f': return readUncompressedArray<float>(arrayLength);
+                    case 'd': return readUncompressedArray<double>(arrayLength);
+                    case 'l': return readUncompressedArray<int64_t>(arrayLength);
+                    case 'b': return readUncompressedArray<bool>(arrayLength);
+                    default: throw std::runtime_error("Unkown array property type:" + code); break;
+                    }
+                }
+                if (encoding == 1)
+                {
+                    switch (code)
+                    {
+                    case 'i': return readCompressedArray<int32_t>(arrayLength, compressedLength);
+                    case 'f': return readCompressedArray<float>(arrayLength, compressedLength);
+                    case 'd': return readCompressedArray<double>(arrayLength, compressedLength);
+                    case 'l': return readCompressedArray<int64_t>(arrayLength, compressedLength);
+                    case 'b': return readCompressedArray<bool>(arrayLength, compressedLength);
+                    default: throw std::runtime_error("Unkown array property type:" + code); break;
+                    }
+                }
+                else
+                {
+                    throw std::runtime_error("Unkown property encoding:" + std::to_string(encoding));
+                }
+
+                return 0;
+            }
+
+            size_t readRaw(uint8_t code) const
+            {
+                uint32_t size;
+                m_file.read(reinterpret_cast<char*>(&size), 4);
+                if (size == 0)
+                {
+                    return 4;
+                }
+
+                uint8_t * pData = new uint8_t[size];
+                m_file.read(reinterpret_cast<char*>(pData), size);
+                
+                switch (code)
+                {
+                    case 'S': m_pRecord->properties().insert(new Property(std::string(pData, pData + size))); break;
+                    case 'R': m_pRecord->properties().insert(new Property(pData, size)); break;
+                    default: throw std::runtime_error("Unkown raw property type:" + code); break;
+                }
+
+                delete[] pData;
+                return size + 4;
+            }
+
+        private:
+
+            template<typename T>
+            size_t readPrimitiveValue() const
+            {
+                T val;
+                m_file.read(reinterpret_cast<char*>(&val), sizeof(T));
+                m_pRecord->properties().insert(new Property(val));
+                return sizeof(T);
+            }
+
+            template<typename T>
+            size_t readUncompressedArray(uint32_t arrayLength) const
+            {
+                size_t size = arrayLength * sizeof(T);
+                T * pData = new T[size];
+                m_file.read(reinterpret_cast<char*>(pData), size);
+                m_pRecord->properties().insert(new Property(pData, arrayLength));
+
+                delete[] pData;
+                return size + 12;
+            }
+
+            template<typename T>
+            size_t readCompressedArray(uint32_t arrayLength, uint32_t compressedLength) const
+            {
+                mz_ulong uncompressedLength = arrayLength * sizeof(T);
+                T * pArray = new T[arrayLength];
+
+                unsigned char * pCmpData = new unsigned char[compressedLength];
+                m_file.read(reinterpret_cast<char*>(pCmpData), compressedLength);
+
+                int cmp_status = uncompress(reinterpret_cast<unsigned char*>(pArray), &uncompressedLength, pCmpData, compressedLength);
+                delete[] pCmpData;
+                if (cmp_status != Z_OK)
+                {
+                    throw std::runtime_error("Failed to uncompress array of record: " + m_pRecord->name());
+                }
+
+                m_pRecord->properties().insert(new Property(pArray, arrayLength));
+                delete[] pArray;
+                return compressedLength + 12;
+            }
+
+            std::ifstream & m_file;
+            Record *        m_pRecord;
+        };
+
+    }
+
+    void File::read(const std::string & filename)
+    {
+        clear();
+
+        std::ifstream file(filename, std::ios::binary);
+        if (file.is_open() == false)
         {
             throw std::runtime_error("Failed to open file.");
         }
 
-        std::size_t pos = 0;
-        fin.seekg(pos, std::ifstream::end);
-        const std::size_t fileSize = static_cast<std::size_t>(fin.tellg());
-        fin.seekg(pos, std::ifstream::beg);
-
-        // Check if header is correct
-        CheckOverflow(27, pos, fileSize);
-
-        std::string magic(20, '\0');
-        fin.read(&magic[0], 20);
-
-        fin.seekg(23);
-        unsigned int version = 0;
-        fin.read(reinterpret_cast<char*>(&version), 4);
-
-        // Create record stack.
-        std::stack<RecordList *> listStack;
-        listStack.push(this);
-        RecordList * curList = this;
-        Record * curRecord = nullptr;
-
-        unsigned int endOffset = 0;
-        unsigned int numProperties = 0;
-        unsigned int propertyListLen = 0;
-        unsigned char nameLen = 0;
-
-        unsigned int arrayLength = 0;
-        unsigned int encoding = 0;
-        unsigned int compressedLength = 0;
-
-
-        size_t level = 1;
-
-        while (pos < fileSize && fin.eof() == false)
+        // Get file size.
+        file.seekg(0, std::ios::end);
+        std::streampos streamPos = file.tellg();
+        if (streamPos > static_cast<std::streampos>(std::numeric_limits<uint32_t>::max()))
         {
-            CheckOverflow(13, pos, fileSize);
+            throw std::runtime_error("Input file size is too big.");
+        }
+        const std::size_t fileSize = static_cast<std::size_t>(streamPos);
+        file.seekg(0, std::ios::beg);
 
-            fin.read(reinterpret_cast<char*>(&endOffset), 4);
-            if (endOffset == 0)
+        // Read header.
+        std::string magic(20, '\0');
+        file.read(&magic[0], 20);
+        file.seekg(23);
+        file.read(reinterpret_cast<char*>(&m_version), 4);
+
+        if (file.eof())
+        {
+            throw std::runtime_error("Invalid FBX file.");
+        }
+
+        // Read record.
+        std::stack<std::pair<Record *, size_t>> recordStack;
+        recordStack.push(std::make_pair(nullptr, fileSize));
+       
+        while(recordStack.size())
+        {
+            uint32_t endOffset = 0;
+            uint32_t numProperties = 0;
+            uint32_t propertyListLen = 0;
+            uint8_t nameLen = 0;
+            const size_t recordPos = file.tellg();
+
+            file.read(reinterpret_cast<char*>(&endOffset), 4);
+            file.read(reinterpret_cast<char*>(&numProperties), 4);
+            file.read(reinterpret_cast<char*>(&propertyListLen), 4);
+            file.read(reinterpret_cast<char*>(&nameLen), 1);
+
+            std::string name(nameLen, '\0');
+            file.read(&name[0], nameLen);
+
+            if (file.eof())
             {
-                //  std::cout << pos << ": Skip" << std::endl;
-
-                level--;
-                if (level == 0)
-                {
-                    break;
-                }
-
-                fin.seekg(pos, std::ifstream::beg);
-
-                listStack.pop();
-                curList = listStack.top();
-                curRecord = curList->m_recordList.back();
-
-                continue; // Done parsing.
+                throw std::runtime_error("Invalid record header.");
             }
 
-            fin.read(reinterpret_cast<char*>(&numProperties), 4);
-            fin.read(reinterpret_cast<char*>(&propertyListLen), 4);
-            fin.read(reinterpret_cast<char*>(&nameLen), 1);
+            if (endOffset == 0) // End of nested list.
+            {
+                recordStack.pop();
+                continue;
+            }
 
-            CheckOverflow(nameLen, pos, fileSize);
-            std::string name(nameLen, '\0');
-            fin.read(&name[0], nameLen);
+            const auto & stackTop = recordStack.top();
+            Record * pParentRecord = stackTop.first;
+            size_t parentEndOffset = stackTop.second;
 
+            // Validate endoffset.
             if (endOffset > fileSize)
             {
-                throw std::runtime_error("Incorrect record(" + name + ") end offset: " + std::to_string(endOffset));
+                throw std::runtime_error("Record end offset exceeding file size.");
             }
-
-            // Add new record to list
-            curRecord = curList->pushBack(name);
-
-            //std::cout << pos << ": Rec(" << level << "): " << name << " - " << pos << ", " << endOffset << std::endl;
-
-            // Parse properties
-            size_t nesterListPos = pos + propertyListLen;
-
-            for (unsigned int p = 0; p < numProperties; p++)
+            if (endOffset >= parentEndOffset)
             {
-                char propType = '\0';
-                CheckOverflow(1, pos, fileSize);
-                fin.read(&propType, 1);
-
-                //std::cout << "  Prop " << p << ": " << propType << std::endl;;
-
-                /*
-                i) Primitive Types
-
-                Y : 2 byte signed Integer
-                C : 1 bit boolean(1: true, 0 : false) encoded as the LSB of a 1 Byte value.
-                I : 4 byte signed Integer
-                F : 4 byte single - precision IEEE 754 number
-                D : 8 byte double - precision IEEE 754 number
-                L : 8 byte signed Integer
-
-                ii) Array types
-
-                f : Array of 4 byte single - precision IEEE 754 number
-                d : Array of 8 byte double - precision IEEE 754 number
-                l : Array of 8 byte signed Integer
-                i : Array of 4 byte signed Integer
-                b : Array of 1 byte Booleans(always 0 or 1)
-
-                iii) Special types
-
-                S: String
-                R: raw binary data
-
-                */
-
-                bool isArray = false;
-
-
-                switch (propType)
-                {
-                case 'C':
-                {
-                    CheckOverflow(1, pos, fileSize);
-                    bool boolean = false;
-                    fin.read(reinterpret_cast<char*>(&boolean), 1);
-                    curRecord->pushBack(boolean);
-                }
-                break;
-                case 'Y':
-                {
-                    CheckOverflow(2, pos, fileSize);
-                    int16_t integer16 = 0;
-                    fin.read(reinterpret_cast<char*>(&integer16), 2);
-                    curRecord->pushBack(integer16);
-                }
-                break;
-                case 'I':
-                {
-                    CheckOverflow(4, pos, fileSize);
-                    int32_t integer32 = 0;
-                    fin.read(reinterpret_cast<char*>(&integer32), 4);
-                    curRecord->pushBack(integer32);
-                }
-                break;
-                case 'L':
-                {
-                    CheckOverflow(8, pos, fileSize);
-                    int64_t integer64 = 0;
-                    fin.read(reinterpret_cast<char*>(&integer64), 8);
-                    curRecord->pushBack(integer64);
-                }
-                break;
-                case 'F':
-                {
-                    CheckOverflow(4, pos, fileSize);
-                    float float32 = 0;
-                    fin.read(reinterpret_cast<char*>(&float32), 4);
-                    curRecord->pushBack<float>(float32);
-                }
-                break;
-                case 'D':
-                {
-                    CheckOverflow(8, pos, fileSize);
-                    double float64 = 0;
-                    fin.read(reinterpret_cast<char*>(&float64), 8);
-                    curRecord->pushBack(float64);
-                }
-                break;
-                case 'S':
-                {
-                    CheckOverflow(4, pos, fileSize);
-                    unsigned int dataSize = 0;
-                    fin.read(reinterpret_cast<char*>(&dataSize), 4);
-
-                    if (dataSize)
-                    {
-                        CheckOverflow(dataSize, pos, fileSize);
-                        Property * prop = curRecord->pushBack(std::string(""));
-                        std::string * propStr = prop->m_value.m_pString;
-                        propStr->resize(dataSize);
-                        fin.read(&(*propStr)[0], dataSize);
-                        prop->m_size = dataSize;
-                    }
-                }
-                break;
-                case 'R':
-                {
-                    CheckOverflow(4, pos, fileSize);
-                    unsigned int dataSize = 0;
-                    fin.read(reinterpret_cast<char*>(&dataSize), 4);
-
-                    if (dataSize)
-                    {
-                        CheckOverflow(dataSize, pos, fileSize);
-                        Property * prop = curRecord->pushBack<uint8_t>(nullptr, dataSize);
-                        uint8_t * raw = prop->m_value.m_pRaw;
-                        fin.read(reinterpret_cast<char*>(raw), dataSize);
-                    }
-                }
-                break;
-                case 'b':
-                case 'i':
-                case 'l':
-                case 'f':
-                case 'd':
-                {
-                    CheckOverflow(12, pos, fileSize);
-                    fin.read(reinterpret_cast<char*>(&arrayLength), 4);
-                    fin.read(reinterpret_cast<char*>(&encoding), 4);
-                    fin.read(reinterpret_cast<char*>(&compressedLength), 4);
-
-                    if (encoding != 0 && encoding != 1)
-                    {
-                        throw std::runtime_error("Unkown encoding, record(" + curRecord->name() + ".");
-                    }
-
-                    isArray = true;
-                }
-                break;
-                default:
-                    break;
-                }
-
-                if (isArray && arrayLength)
-                {
-                    switch (propType)
-                    {
-                    case 'b':
-                    {
-                        Property * prop = curRecord->pushBack<bool>(nullptr, arrayLength);
-                        bool * pArray = prop->m_value.m_pBooleanArray;
-
-                        if (encoding == 1)
-                        {
-                            CheckOverflow(compressedLength, pos, fileSize);
-
-                            mz_ulong uncomp_len = arrayLength * sizeof(bool);
-                            unsigned char * pCmp = new unsigned char[uncomp_len];
-                            fin.read(reinterpret_cast<char*>(pCmp), uncomp_len);
-
-                            int cmp_status = uncompress(reinterpret_cast<unsigned char*>(pArray), &uncomp_len, pCmp, compressedLength);
-                            delete[] pCmp;
-                            if (cmp_status != Z_OK)
-                            {
-                                throw std::runtime_error("Failed to uncompress arrayy, record(" + curRecord->name() + ".");
-                            }
-                        }
-                        else
-                        {
-                            CheckOverflow(arrayLength, pos, fileSize);
-                            fin.read(reinterpret_cast<char*>(pArray), arrayLength);
-                        }
-                    }
-                    break;
-                    case 'i':
-                    {
-                        Property * prop = curRecord->pushBack<int32_t>(nullptr, arrayLength);
-                        int32_t * pArray = prop->m_value.m_pInteger32Array;
-
-                        if (encoding == 1)
-                        {
-                            CheckOverflow(compressedLength, pos, fileSize);
-
-                            mz_ulong uncomp_len = arrayLength * sizeof(int32_t);
-                            unsigned char * pCmp = new unsigned char[uncomp_len];
-                            fin.read(reinterpret_cast<char*>(pCmp), uncomp_len);
-
-                            int cmp_status = uncompress(reinterpret_cast<unsigned char*>(pArray), &uncomp_len, pCmp, compressedLength);
-                            delete[] pCmp;
-                            if (cmp_status != Z_OK)
-                            {
-                                throw std::runtime_error("Failed to uncompress arrayy, record(" + curRecord->name() + ".");
-                            }
-                        }
-                        else
-                        {
-                            CheckOverflow(arrayLength * sizeof(int32_t), pos, fileSize);
-                            fin.read(reinterpret_cast<char*>(pArray), arrayLength * sizeof(int32_t));
-                        }
-                    }
-                    break;
-                    case 'l':
-                    {
-                        Property * prop = curRecord->pushBack<int64_t>(nullptr, arrayLength);
-                        int64_t * pArray = prop->m_value.m_pInteger64Array;
-
-                        if (encoding == 1)
-                        {
-                            CheckOverflow(compressedLength, pos, fileSize);
-
-                            mz_ulong uncomp_len = arrayLength * sizeof(int64_t);
-                            unsigned char * pCmp = new unsigned char[uncomp_len];
-                            fin.read(reinterpret_cast<char*>(pCmp), uncomp_len);
-
-                            int cmp_status = uncompress(reinterpret_cast<unsigned char*>(pArray), &uncomp_len, pCmp, compressedLength);
-                            delete[] pCmp;
-                            if (cmp_status != Z_OK)
-                            {
-                                throw std::runtime_error("Failed to uncompress arrayy, record(" + curRecord->name() + ".");
-                            }
-                        }
-                        else
-                        {
-                            CheckOverflow(arrayLength * sizeof(int64_t), pos, fileSize);
-                            fin.read(reinterpret_cast<char*>(pArray), arrayLength * sizeof(int64_t));
-                        }
-                    }
-                    break;
-                    case 'f':
-                    {
-                        Property * prop = curRecord->pushBack<float>(nullptr, arrayLength);
-                        float * pArray = prop->m_value.m_pFloat32Array;
-
-                        if (encoding == 1)
-                        {
-                            CheckOverflow(compressedLength, pos, fileSize);
-
-                            mz_ulong uncomp_len = arrayLength * sizeof(float);
-                            unsigned char * pCmp = new unsigned char[uncomp_len];
-                            fin.read(reinterpret_cast<char*>(pCmp), uncomp_len);
-
-                            int cmp_status = uncompress(reinterpret_cast<unsigned char*>(pArray), &uncomp_len, pCmp, compressedLength);
-                            delete[] pCmp;
-                            if (cmp_status != Z_OK)
-                            {
-                                throw std::runtime_error("Failed to uncompress arrayy, record(" + curRecord->name() + ".");
-                            }
-                        }
-                        else
-                        {
-                            CheckOverflow(arrayLength * sizeof(float), pos, fileSize);
-                            fin.read(reinterpret_cast<char*>(pArray), arrayLength * sizeof(float));
-                        }
-                    }
-                    break;
-                    case 'd':
-                    {
-                        Property * prop = curRecord->pushBack<double>(nullptr, arrayLength);
-                        double * pArray = prop->m_value.m_pFloat64Array;
-
-                        if (encoding == 1)
-                        {
-                            CheckOverflow(compressedLength, pos, fileSize);
-
-                            mz_ulong uncomp_len = arrayLength * sizeof(double);
-                            unsigned char * pCmp = new unsigned char[uncomp_len];
-                            fin.read(reinterpret_cast<char*>(pCmp), uncomp_len);
-
-                            int cmp_status = uncompress(reinterpret_cast<unsigned char*>(pArray), &uncomp_len, pCmp, compressedLength);
-                            delete[] pCmp;
-                            if (cmp_status != Z_OK)
-                            {
-                                throw std::runtime_error("Failed to uncompress arrayy, record(" + curRecord->name() + ".");
-                            }
-                        }
-                        else
-                        {
-                            CheckOverflow(arrayLength * sizeof(double), pos, fileSize);
-                            fin.read(reinterpret_cast<char*>(pArray), arrayLength * sizeof(double));
-                        }
-
-                    }
-                    break;
-                    default:
-                        break;
-                    }
-                }
-
+                throw std::runtime_error("Record end offset exceeding parent record.");
             }
 
-            // Skip properties if skipped any...
-            pos = nesterListPos;
-            fin.seekg(nesterListPos, std::ifstream::beg);
-
-            // New record level(new nester list).
-            if (pos < endOffset)
+            // Validate property list length.
+            if (recordPos + propertyListLen > endOffset)
             {
-                level++;
-
-                RecordList * pNewList = new RecordList();
-                curRecord->m_pChildList = pNewList;
-
-                listStack.push(pNewList);
-                curList = pNewList;
+                throw std::runtime_error("Invalid record property list length.");
             }
 
+            // Create and add new record.
+            Record * pNewRecord = new Record(name, pParentRecord);
+            recordStack.push(std::make_pair(pNewRecord, endOffset));
+            if (pParentRecord == nullptr)
+            {
+                insert(pNewRecord);
+            }
+
+            // Read properties.
+            const size_t propertiesEndOffset = propertyListLen + file.tellg();
+            size_t propertiesByteRead = 0;
+            PropertyReader reader(file, pNewRecord);
+
+            for (uint32_t i = 0; i < numProperties; ++i)
+            {
+                uint8_t code;
+                file.read(reinterpret_cast<char*>(&code), 1);
+
+                if (code == 'S' || code == 'R') // String/raw.
+                {
+                    propertiesByteRead += reader.readRaw(code) + 1;
+                }
+                else if (code < 'Z') // primitives.
+                {
+                    propertiesByteRead += reader.readPrimitive(code) + 1;
+                }
+                else // arrays.
+                {
+                    propertiesByteRead += reader.readArray(code) + 1;
+                }
+            }
+
+            // Make sure all property bytes are extracted.
+            if (propertiesByteRead != propertyListLen)
+            {
+                size_t a = file.tellg();
+                throw std::runtime_error("Invalid property list length of record: " + pParentRecord->name());
+            }
+
+            // Go to end of properties
+            file.seekg(propertiesEndOffset, std::ios::beg);
+
+            // Skip properties.
+            /*if (propertyListLen)
+            {
+                file.seekg(propertyListLen, std::ios::cur);
+                if (file.eof())
+                {
+                    throw std::runtime_error("Invalid property list length: " + name);
+                }
+            }*/
+
+            // Error check end record of nested list.
+            const size_t curFilePos = static_cast<size_t>(file.tellg());
+            if (parentEndOffset <= curFilePos)
+            {
+                throw std::runtime_error("Missing nested list end of record: " + pParentRecord->name());
+            }
+
+            // Exit record if no nested list is present.
+            if (endOffset == curFilePos)
+            {
+                recordStack.pop();
+                continue;
+            }
+
+            // Read nested list next loop.
         }
 
     }
 
-    void RecordList::write(const std::string & filename) const
+    void File::write(const std::string & filename) const
     {
 
     }
 
-
-    size_t RecordList::size() const
+    uint32_t File::version() const
     {
-        return m_recordList.size();
+        return m_version;
     }
 
-    Record * RecordList::front() const
+    void File::version(const uint32_t version)
     {
-        if (m_recordList.size() == 0)
+        m_version = version;
+    }
+
+    size_t File::size() const
+    {
+        return m_records.size();
+    }
+
+    File::Iterator File::insert(Record * record)
+    {
+        record->parent(nullptr);
+        return m_records.insert(m_records.end(), record);
+    }
+    File::Iterator File::insert(Iterator position, Record * record)
+    {
+        return m_records.insert(position, record);
+    }
+
+    File::Iterator File::begin()
+    {
+        return m_records.begin();
+    }
+    File::ConstIterator File::begin() const
+    {
+        return m_records.begin();
+    }
+
+    File::Iterator File::end()
+    {
+        return m_records.end();
+    }
+    File::ConstIterator File::end() const
+    {
+        return m_records.end();
+    }
+
+    File::Iterator File::find(const std::string & p_name)
+    {
+        for (auto it = m_records.begin(); it != m_records.end(); it++)
         {
-            return nullptr;
+            if ((*it)->name() == p_name)
+            {
+                return it;
+            }
         }
-
-        return m_recordList.front();
+        return m_records.end();
     }
-
-    Record * RecordList::back() const
+    File::ConstIterator File::find(const std::string & p_name) const
     {
-        if (m_recordList.size() == 0)
+        for (auto it = m_records.begin(); it != m_records.end(); it++)
         {
-            return nullptr;
+            if ((*it)->name() == p_name)
+            {
+                return it;
+            }
         }
-
-        return m_recordList.back();
+        return m_records.end();
     }
 
-    Record * RecordList::find(const std::string & name) const
+    File::Iterator File::erase(Record * record)
     {
-        auto it = m_recordMap.find(name);
-        if (it == m_recordMap.end())
-        {
-            return nullptr;
-        }
-
-        return it->second;
+        return m_records.end();
+    }
+    File::Iterator File::erase(Iterator position)
+    {
+        return m_records.end();
     }
 
-
-    Record * RecordList::pushBack(const std::string & name)
+    void File::clear()
     {
-        Record * pOldLast = nullptr;
-        if (m_recordList.size())
-        {
-            pOldLast = m_recordList.back();
-        }
-
-        Record * pNewRecord = new Record(this, name);
-        m_recordList.push_back(pNewRecord);
-        m_recordMap.insert({ name, pNewRecord });
-
-        pNewRecord->m_pPrevRecord = pOldLast;
-        if (pOldLast)
-        {
-            pOldLast->m_pNextRecord = pNewRecord;
-        }
-
-        return pNewRecord;
-    }
-
-    Record * RecordList::pushFront(const std::string & name)
-    {
-        Record * pOldLast = nullptr;
-        if (m_recordList.size())
-        {
-            pOldLast = m_recordList.front();
-        }
-
-        Record * pNewRecord = new Record(this, name);
-        m_recordList.push_front(pNewRecord);
-        m_recordMap.insert({ name, pNewRecord });
-
-        pNewRecord->m_pNextRecord = pOldLast;
-        if (pOldLast)
-        {
-            pOldLast->m_pPrevRecord = pNewRecord;
-        }
-
-        return pNewRecord;
-    }
-
-
-    /* bool RecordList::erase(Record * record)
-    {
-    bool found = false;
-    for (auto it = m_recordList.begin(); it != m_recordList.end(); it++)
-    {
-    if (*it == record)
-    {
-    delete *it;
-    it = m_recordList.erase(it);
-
-    if (m_recordList.size() != 0)
-    {
-    if (m_recordList.size() == 1)
-    {
-    Record * pRemaining = m_recordList.front();
-    pRemaining->m_pPrevRecord = nullptr;
-    pRemaining->m_pNextRecord = nullptr;
-    }
-    else
-    {
-    if (it == m_recordList.end())
-    {
-    m_recordList.back()->m_pNextRecord = nullptr;
-    }
-    else
-    {
-    Record * pNext = *it;
-    it--;
-    }
-    }
-    }
-
-    found = true;
-    break;
-    }
-    }
-
-    if (found == false)
-    {
-    return false;
-    }
-
-    for (auto it = m_recordMap.begin(); it != m_recordMap.end(); it++)
-    {
-    if (it->second == record)
-    {
-    m_recordMap.erase(it);
-    return true;
-    }
-    }
-
-    return false;
-    }*/
-
-    void RecordList::clear()
-    {
-        for (auto it = m_recordList.begin(); it != m_recordList.end(); it++)
+        for (auto it = m_records.begin(); it != m_records.end(); ++it)
         {
             delete *it;
         }
-        m_recordList.clear();
-        m_recordMap.clear();
+        m_records.clear();
     }
 
-    void RecordList::setRecordName(Record * record, const std::string & name)
+    File::File(File &)
     {
-        auto it = m_recordMap.find(record->name());
-        if (it == m_recordMap.end())
-        {
-            throw std::runtime_error("Unkown record: " + record->name());
-        }
-
-        m_recordMap.erase(it);
-        m_recordMap.insert({ name, record });
-        record->m_name = name;
     }
 
-
-    // Static functions
-    void CheckOverflow(const size_t size, size_t & pos, const size_t max)
-    {
-        if (size + pos > max)
-        {
-            throw std::runtime_error("File reading overflow.");
-        }
-
-        pos += size;
-    }
-
-    template<typename T>
-    void ToString(std::string & output, const T & in)
-    {
-        std::stringstream ss;
-        ss << in;
-        output = ss.str();
-    }
 }
