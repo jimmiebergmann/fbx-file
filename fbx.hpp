@@ -30,7 +30,7 @@
 #include <list>
 #include <map>
 #include <vector>
-#include <fstream>
+#include <functional>
 
 namespace Fbx
 {
@@ -196,6 +196,7 @@ namespace Fbx
         ~File();
 
         void read(const std::string & filename);
+        void read(const std::string & filename, std::function<void(uint32_t)> onHeaderRead);
         void write(const std::string & filename) const;
 
         uint32_t version() const;

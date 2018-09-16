@@ -18,6 +18,7 @@ void printRecord(const Fbx::Record * record, size_t level = 0)
 
 void printFile(const Fbx::File & file)
 {
+    std::cout << "FBX version: " << file.version() << std::endl;
     for(auto r : file)
     {
         printRecord(r);
@@ -30,13 +31,22 @@ int main()
 
     auto t_start = std::chrono::high_resolution_clock::now();
         
-    file.read("../models/blender-default.fbx");
+    auto versionCheck = [](uint32_t version)
+    {
+        if (version < 7100)
+        {
+            throw std::runtime_error("Invalid FBX version.");
+        }
+    };
+
+    file.read("../models/blender-default.fbx", versionCheck);
+    //file.read("../bin/out-model.fbx", versionCheck);
 
     auto t_now = std::chrono::high_resolution_clock::now();
     std::chrono::milliseconds elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(t_now - t_start);
     std::cout << "Read time: " << elapsed.count() << "ms." << std::endl;
 
-   // file.write("../bin/out-model.fbx");
+    file.write("../bin/out-model.fbx");
 
     printFile(file);
 

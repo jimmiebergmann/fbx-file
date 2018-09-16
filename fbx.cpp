@@ -27,23 +27,13 @@
 #include <memory>
 #include <stack>
 #include <sstream>
+#include <fstream>
 #include <limits>
-#include <iostream>
+#include <memory>
 #include "miniz.h"
 
 namespace Fbx
 {
-
-    /* static const std::string g_typeStrings[13] =
-     {
-         "Boolean", "Integer16", "Integer32", "Integer64", "Float32", "Float64", "BooleanArray",
-         "Integer32Array", "Integer64Array", "Float32Array", "Float64Array", "String", "Raw"
-     };
-
-     static const uint8_t g_typeCodes[13] =
-     {
-         'C', 'Y', 'I', 'L', 'F', 'D', 'b', 'i', 'l', 'f', 'd', 'S', 'R'
-     };*/
 
     // Property
     Property::Property(const bool primitive) :
@@ -59,7 +49,7 @@ namespace Fbx
     }
 
     Property::Property(const int32_t primitive) :
-        m_type(Type::Integer64)
+        m_type(Type::Integer32)
     {
         m_primitive.integer32 = primitive;
     }
@@ -71,13 +61,13 @@ namespace Fbx
     }
 
     Property::Property(const float primitive) :
-        m_type(Type::Boolean)
+        m_type(Type::Float32)
     {
         m_primitive.float32 = primitive;
     }
 
     Property::Property(const double primitive) :
-        m_type(Type::Boolean)
+        m_type(Type::Float64)
     {
         m_primitive.float64 = primitive;
     }
@@ -497,7 +487,7 @@ namespace Fbx
 
     // File class.
     File::File() :
-        m_version(7400)
+        m_version(0)
     {
     }
 
@@ -584,6 +574,10 @@ namespace Fbx
                 m_file.read(reinterpret_cast<char*>(&size), 4);
                 if (size == 0)
                 {
+                    if (code == 'S')
+                    {
+                        m_pRecord->properties().insert(new Property(std::string("")));
+                    }
                     return 4;
                 }
 
@@ -628,20 +622,18 @@ namespace Fbx
             size_t readCompressedArray(uint32_t arrayLength, uint32_t compressedLength) const
             {
                 mz_ulong uncompressedLength = arrayLength * sizeof(T);
-                T * pArray = new T[arrayLength];
 
-                unsigned char * pCmpData = new unsigned char[compressedLength];
-                m_file.read(reinterpret_cast<char*>(pCmpData), compressedLength);
+                std::unique_ptr<T> pArray(new T[arrayLength]);
+                std::unique_ptr<unsigned char> pCmpData(new unsigned char[compressedLength]);
 
-                int cmp_status = uncompress(reinterpret_cast<unsigned char*>(pArray), &uncompressedLength, pCmpData, compressedLength);
-                delete[] pCmpData;
-                if (cmp_status != Z_OK)
+                m_file.read(reinterpret_cast<char*>(pCmpData.get()), compressedLength);
+
+                if (uncompress(reinterpret_cast<unsigned char*>(pArray.get()), &uncompressedLength, pCmpData.get(), compressedLength) != Z_OK)
                 {
                     throw std::runtime_error("Failed to uncompress array of record: " + m_pRecord->name());
                 }
 
-                m_pRecord->properties().insert(new Property(pArray, arrayLength));
-                delete[] pArray;
+                m_pRecord->properties().insert(new Property(pArray.get(), arrayLength));
                 return compressedLength + 12;
             }
 
@@ -649,12 +641,55 @@ namespace Fbx
             Record *        m_pRecord;
         };
 
+        template<typename T>
+        void writePrimitive(std::vector<uint8_t> & data, T value)
+        {
+            const uint8_t * pValue = reinterpret_cast<const uint8_t*>(&value);
+            data.insert(data.end(), pValue, pValue + sizeof(T));
+        }
+
+        void writeRaw(std::vector<uint8_t> & data, const std::vector<uint8_t> & raw)
+        {
+            const uint32_t size = static_cast<uint32_t>(raw.size());
+            const uint8_t * pSize = reinterpret_cast<const uint8_t*>(&size);
+            data.insert(data.end(), pSize, pSize + 4);
+            std::copy(raw.begin(), raw.end(), std::back_inserter(data));
+        }
+
+        template<typename T>
+        void writeArray(std::vector<uint8_t> & data, const std::vector<Property::Value> & array)
+        {
+            uint32_t arrayLength = static_cast<uint32_t>(array.size());
+            const uint8_t * pArrayLength = reinterpret_cast<const uint8_t*>(&arrayLength);
+            uint32_t compressedLength = arrayLength * sizeof(T);
+            const uint8_t * pCompressedLength = reinterpret_cast<const uint8_t*>(&compressedLength);
+
+            data.insert(data.end(), pArrayLength, pArrayLength + 4);
+            data.insert(data.end(), 4, 0);
+            data.insert(data.end(), pCompressedLength, pCompressedLength + 4);
+
+            for (uint32_t i = 0; i < arrayLength; i++)
+            {
+                const uint8_t * pValue = reinterpret_cast<const uint8_t*> (&array[i].boolean);
+                data.insert(data.end(), pValue, pValue + sizeof(T));
+            }
+
+           // uint32_t encoding = 0;
+           /* 4 	Uint32 	ArrayLength
+            4 	Uint32 	Encoding
+            4 	Uint32 	CompressedLength
+            ? ? Contents*/
+        }
+
     }
 
     void File::read(const std::string & filename)
     {
-        clear();
+        read(filename, [](uint32_t) {});
+    }
 
+    void File::read(const std::string & filename, std::function<void(uint32_t)> onHeaderRead)
+    {
         std::ifstream file(filename, std::ios::binary);
         if (file.is_open() == false)
         {
@@ -677,10 +712,14 @@ namespace Fbx
         file.seekg(23);
         file.read(reinterpret_cast<char*>(&m_version), 4);
 
+        // call on header function.
+        onHeaderRead(m_version);
+
         if (file.eof())
         {
             throw std::runtime_error("Invalid FBX file.");
         }
+
 
         // Read record.
         std::stack<std::pair<Record *, size_t>> recordStack;
@@ -701,6 +740,11 @@ namespace Fbx
 
             std::string name(nameLen, '\0');
             file.read(&name[0], nameLen);
+
+            if (name == "MetaData")
+            {
+                int a = 5;
+            }
 
             if (file.eof())
             {
@@ -772,19 +816,6 @@ namespace Fbx
                 throw std::runtime_error("Invalid property list length of record: " + pParentRecord->name());
             }
 
-            // Go to end of properties
-            file.seekg(propertiesEndOffset, std::ios::beg);
-
-            // Skip properties.
-            /*if (propertyListLen)
-            {
-                file.seekg(propertyListLen, std::ios::cur);
-                if (file.eof())
-                {
-                    throw std::runtime_error("Invalid property list length: " + name);
-                }
-            }*/
-
             // Error check end record of nested list.
             const size_t curFilePos = static_cast<size_t>(file.tellg());
             if (parentEndOffset <= curFilePos)
@@ -806,7 +837,127 @@ namespace Fbx
 
     void File::write(const std::string & filename) const
     {
+        std::ofstream file(filename, std::ios::binary);
+        if (file.is_open() == false)
+        {
+            throw std::runtime_error("Failed to open file.");
+        }
 
+        std::vector<uint8_t> data;
+
+        // Write FBX header.
+        const uint8_t magic[21] = "Kaydara FBX Binary  ";
+        const uint32_t version = m_version != 0 ? m_version : 7400;
+        const uint8_t * pVersion = reinterpret_cast<const uint8_t*>(&version);
+
+        data.insert(data.end(), magic, magic + 21);
+        data.push_back(0x1A);
+        data.push_back(0);
+        data.insert(data.end(), pVersion, pVersion + 4);
+        
+        // Iterate stack.
+        std::stack<std::tuple<Record::ConstIterator, Record::ConstIterator, uint32_t>> stack;
+        if (m_records.size())
+        {
+            stack.push(std::make_tuple(m_records.begin(), m_records.end(), 27));
+        }
+
+        while (stack.size())
+        {
+            auto & top = stack.top();
+            Record::ConstIterator & it = std::get<0>(top);
+            Record::ConstIterator & itEnd = std::get<1>(top);
+
+            // Check if this is the end.
+            if (it == itEnd) // End of nested list.
+            {
+                data.insert(data.end(), 0, 13);
+                uint32_t endOffsetPos = std::get<2>(top);
+                uint32_t currentPos = static_cast<uint32_t>(data.size());
+                uint8_t * pcurrentPos = reinterpret_cast<uint8_t*>(&currentPos);
+                data[endOffsetPos] = pcurrentPos[0];
+                data[endOffsetPos + 1] = pcurrentPos[1];
+                data[endOffsetPos + 2] = pcurrentPos[2];
+                data[endOffsetPos + 3] = pcurrentPos[3];
+
+                data.insert(data.end(), 13, 0);
+
+                stack.pop();
+                continue;
+            }
+            else
+            {
+                size_t pos = data.size();
+            }
+
+            const Record * pRecord = *it;
+            std::get<2>(top) = static_cast<uint32_t>(data.size());
+            const uint32_t endOffset = std::get<2>(top);
+            
+            ++it;
+
+            // Write record header.
+            const auto & properties = pRecord->properties();
+            const uint32_t numProperties = static_cast<uint32_t>(properties.size());
+            const uint8_t * pNumProperties = reinterpret_cast<const uint8_t*>(&numProperties);
+            const std::string & name = pRecord->name();
+            const uint8_t * pName = reinterpret_cast<const uint8_t*>(&name[0]);
+            const uint8_t nameLength = static_cast<uint8_t>(name.size());
+            data.insert(data.end(), 4, 0);
+            const uint32_t propertiesOffset = static_cast<uint32_t>(data.size());
+            data.insert(data.end(), pNumProperties, pNumProperties + 4);
+            data.insert(data.end(), 4, 0);
+            data.push_back(nameLength);
+            data.insert(data.end(), pName, pName + nameLength);
+
+            // Write record properties.
+            const uint32_t propertyStart = static_cast<uint32_t>(data.size());
+            for (auto pIt = properties.begin(); pIt != properties.end(); ++pIt)
+            {
+                Property * pProperty = *pIt;
+                data.push_back(pProperty->code());
+                
+                switch (pProperty->code())
+                {
+                case 'I': writePrimitive(data, pProperty->primitive().integer32); break;
+                case 'L': writePrimitive(data, pProperty->primitive().integer64); break;
+                case 'F': writePrimitive(data, pProperty->primitive().float32); break;
+                case 'D': writePrimitive(data, pProperty->primitive().float64); break;
+                case 'C': writePrimitive(data, pProperty->primitive().boolean); break;
+                case 'Y': writePrimitive(data, pProperty->primitive().integer16); break;
+                case 'i': writeArray<int32_t>(data, pProperty->array()); break;
+                case 'l': writeArray<int64_t>(data, pProperty->array()); break;
+                case 'f': writeArray<float>(data, pProperty->array()); break;
+                case 'd': writeArray<double>(data, pProperty->array()); break;
+                case 'b': writeArray<bool>(data, pProperty->array()); break;
+                case 'R':
+                case 'S': writeRaw(data, pProperty->raw()); break;
+                default: break;
+                }
+            }
+
+            // Set properties length
+            const uint32_t propertiesEnd = static_cast<uint8_t>(data.size());
+            const uint32_t propertiesLength = propertiesEnd - propertyStart;
+            const uint8_t * pPropertiesLength = reinterpret_cast<const uint8_t*>(&propertiesLength);
+            data[propertiesOffset] = pPropertiesLength[0];
+            data[propertiesOffset + 1] = pPropertiesLength[1];
+            data[propertiesOffset + 2] = pPropertiesLength[2];
+            data[propertiesOffset + 3] = pPropertiesLength[3];
+
+            // Push nested list.
+            if (pRecord->size())
+            {
+                stack.push(std::make_tuple(pRecord->begin(), pRecord->end(), static_cast<uint32_t>(data.size()) ));
+                continue;
+            }
+            else
+            {
+                data.insert(data.end(), 13, 0);
+            }
+        }
+  
+        file.write(reinterpret_cast<const char*>(&data[0]), data.size());
     }
 
     uint32_t File::version() const
