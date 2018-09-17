@@ -1,6 +1,6 @@
 # fbx-file
 
-[![Build Status](https://travis-ci.org/jimmiebergmann/easy-fbx.svg?branch=master)](https://travis-ci.org/jimmiebergmann/easy-fbx) [![](https://img.shields.io/badge/license-MIT-brightgreen.svg)](https://github.com/jimmiebergmann/Guier/blob/master/LICENSE.md)  
+[![Build Status](https://travis-ci.org/jimmiebergmann/fbx-file.svg?branch=master)](https://travis-ci.org/jimmiebergmann/fbx-file) [![](https://img.shields.io/badge/license-MIT-brightgreen.svg)](https://github.com/jimmiebergmann/Guier/blob/master/LICENSE.md)  
 
 fbx-file is an STL-like library for reading and writing FBX binary files.
 
@@ -20,9 +20,9 @@ file.write("../bin/blender-custom.fbx");
 ```
 
 ## Documentation
-~~See [fbx.hpp](https://github.com/jimmiebergmann/easy-fbx/blob/master/fbx.hpp).~~ Nope, not yet.
+~~See [fbx.hpp](https://github.com/jimmiebergmann/fbx-file/blob/master/fbx.hpp).~~ Nope, not yet.
 ## Examples
-See [examples](https://github.com/jimmiebergmann/easy-fbx/blob/master/examples).
+See [examples](https://github.com/jimmiebergmann/fbx-file/blob/master/examples).
 
 ## Build
 ##### Linux

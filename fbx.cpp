@@ -25,6 +25,7 @@
 
 #include "fbx.hpp"
 #include <memory>
+#include <limits>
 #include <stack>
 #include <sstream>
 #include <fstream>
