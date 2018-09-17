@@ -1,6 +1,5 @@
 #include "../fbx.hpp"
 #include <iostream>
-#include <chrono>
 
 void printRecord(const Fbx::Record * record, size_t level = 0)
 {
@@ -16,9 +15,8 @@ void printRecord(const Fbx::Record * record, size_t level = 0)
     }
 }
 
-void printFile(const Fbx::File & file)
+void printFile(const Fbx::Record & file)
 {
-    std::cout << "FBX version: " << file.version() << std::endl;
     for(auto r : file)
     {
         printRecord(r);
@@ -27,28 +25,24 @@ void printFile(const Fbx::File & file)
 
 int main()
 {
-    Fbx::File file;
-
-    auto t_start = std::chrono::high_resolution_clock::now();
-        
-    auto versionCheck = [](uint32_t version)
+    Fbx::Record file;
+    auto versionCheck = [](std::string magic, uint32_t version)
     {
+        if (magic != "Kaydara FBX Binary  ")
+        {
+            throw std::runtime_error("Invalid magic string.");
+        }
         if (version < 7100)
         {
-            throw std::runtime_error("Invalid FBX version.");
+            throw std::runtime_error("I'm not interested in version less than 7100.");
         }
     };
 
     file.read("../models/blender-default.fbx", versionCheck);
-    //file.read("../bin/out-model.fbx", versionCheck);
-
-    auto t_now = std::chrono::high_resolution_clock::now();
-    std::chrono::milliseconds elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(t_now - t_start);
-    std::cout << "Read time: " << elapsed.count() << "ms." << std::endl;
-
-    file.write("../bin/out-model.fbx");
 
     printFile(file);
+
+    file.write("../bin/out-model.fbx");
 
     return 0;
 }

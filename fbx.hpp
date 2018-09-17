@@ -151,6 +151,11 @@ namespace Fbx
         Record(const std::string & name, Record * parent);
         ~Record();
 
+        void read(const std::string & filename);
+        void read(const std::string & filename, std::function<void(std::string, uint32_t)> onHeaderRead);
+        void write(const std::string & filename) const;
+        void write(const std::string & filename, const uint32_t version) const;
+
         const std::string & name() const;
         void name(const std::string & name);
         Record * parent();
@@ -180,47 +185,6 @@ namespace Fbx
         Record *            m_pParent;
         PropertyList        m_properties;
         std::list<Record *> m_nestedList;
-
-    };
-
-
-    class File
-    {
-
-    public:
-
-        typedef std::list<Record *>::iterator Iterator;
-        typedef std::list<Record *>::const_iterator ConstIterator;
-
-        File();
-        ~File();
-
-        void read(const std::string & filename);
-        void read(const std::string & filename, std::function<void(uint32_t)> onHeaderRead);
-        void write(const std::string & filename) const;
-
-        uint32_t version() const;
-        void version(const uint32_t version);
-
-        size_t size() const;
-        Iterator insert(Record * record);
-        Iterator insert(Iterator position, Record * record);
-        Iterator begin();
-        ConstIterator begin() const;
-        Iterator end();
-        ConstIterator end() const;
-        Iterator find(const std::string & name);
-        ConstIterator find(const std::string & name) const;
-        Iterator erase(Record * record);
-        Iterator erase(Iterator position);
-        void clear();
-
-    private:
-
-        File(File &);
-
-        uint32_t            m_version;
-        std::list<Record *> m_records;
 
     };
 
