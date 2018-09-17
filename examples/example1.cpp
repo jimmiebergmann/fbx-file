@@ -39,9 +39,7 @@ int main()
     };
 
     file.read("../models/blender-default.fbx", versionCheck);
-
     printFile(file);
-
     file.write("../bin/out-model.fbx");
 
     return 0;

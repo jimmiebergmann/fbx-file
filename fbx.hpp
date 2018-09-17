@@ -125,6 +125,10 @@ namespace Fbx
         ConstIterator begin() const;
         Iterator end();
         ConstIterator end() const;
+        Property * front();
+        const Property * front() const;
+        Property * back();
+        const Property * back() const;
         Iterator erase(Property * property);
         Iterator erase(Iterator position);
         void clear();
@@ -171,6 +175,10 @@ namespace Fbx
         ConstIterator begin() const;
         Iterator end();
         ConstIterator end() const;
+        Record * front();
+        const Record * front() const;
+        Record * back();
+        const Record * back() const;
         Iterator find(const std::string & name);
         ConstIterator find(const std::string & name) const;
         Iterator erase(Record * record);

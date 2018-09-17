@@ -466,6 +466,24 @@ namespace Fbx
         return m_properties.end();
     }
 
+    Property * PropertyList::front()
+    {
+        return m_properties.front();
+    }
+    const Property * PropertyList::front() const
+    {
+        return m_properties.front();
+    }
+
+    Property * PropertyList::back()
+    {
+        return m_properties.back();
+    }
+    const Property * PropertyList::back() const
+    {
+        return m_properties.back();
+    }
+
     PropertyList::Iterator PropertyList::erase(Property * property)
     {
         return m_properties.end();
@@ -874,6 +892,24 @@ namespace Fbx
     Record::ConstIterator Record::end() const
     {
         return m_nestedList.end();
+    }
+
+    Record * Record::front()
+    {
+        return m_nestedList.front();
+    }
+    const Record * Record::front() const
+    {
+        return m_nestedList.front();
+    }
+
+    Record * Record::back()
+    {
+        return m_nestedList.back();
+    }
+    const Record * Record::back() const
+    {
+        return m_nestedList.back();
     }
 
     Record::Iterator Record::find(const std::string & p_name)
