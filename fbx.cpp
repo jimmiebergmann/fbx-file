@@ -116,7 +116,7 @@ namespace Fbx
                     return 4;
                 }
 
-                std::unique_ptr<uint8_t> data(new uint8_t[size]);
+                std::unique_ptr<uint8_t[]> data(new uint8_t[size]);
                 m_file.read(reinterpret_cast<char*>(data.get()), size);
 
                 switch (code)
@@ -144,7 +144,7 @@ namespace Fbx
             size_t readUncompressedArray(uint32_t arrayLength) const
             {
                 size_t size = arrayLength * sizeof(T);
-                std::unique_ptr<T> data(new T[size]);
+                std::unique_ptr<T[]> data(new T[size]);
                 m_file.read(reinterpret_cast<char*>(data.get()), size);
                 m_pRecord->properties().insert(new Property(data.get(), arrayLength));
                 return size + 12;
@@ -154,8 +154,8 @@ namespace Fbx
             size_t readCompressedArray(uint32_t arrayLength, uint32_t compressedLength) const
             {
                 mz_ulong uncompressedLength = arrayLength * sizeof(T);
-                std::unique_ptr<T> pArray(new T[arrayLength]);
-                std::unique_ptr<unsigned char> pCmpData(new unsigned char[compressedLength]);
+                std::unique_ptr<T[]> pArray(new T[arrayLength]);
+                std::unique_ptr<unsigned char[]> pCmpData(new unsigned char[compressedLength]);
 
                 m_file.read(reinterpret_cast<char*>(pCmpData.get()), compressedLength);
                 if (uncompress(reinterpret_cast<unsigned char*>(pArray.get()), &uncompressedLength, pCmpData.get(), compressedLength) != Z_OK)
