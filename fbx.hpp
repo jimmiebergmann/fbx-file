@@ -78,6 +78,7 @@ namespace Fbx
         Property(const int64_t * array, const uint32_t count);
         Property(float * array, const uint32_t count);
         Property(const double * array, const uint32_t count);
+        Property(const char * string);
         Property(const std::string & string);
         Property(const uint8_t * raw, const uint32_t size);
 

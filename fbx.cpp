@@ -304,6 +304,11 @@ namespace Fbx
         }
     }
 
+    Property::Property(const char * p_string) :
+        m_type(Type::String),
+        m_raw(p_string, p_string + strlen(p_string))
+    {
+    }
     Property::Property(const std::string & p_string) :
         m_type(Type::String),
         m_raw(p_string.c_str(), p_string.c_str() + p_string.size())
@@ -339,9 +344,9 @@ namespace Fbx
             case Type::Float64: return 8;
             case Type::BooleanArray: return static_cast<uint32_t>(m_array.size());
             case Type::Integer32Array:
-            case Type::Float32Array: return static_cast<uint32_t>(m_array.size()) * 4;
+            case Type::Float32Array: return static_cast<uint32_t>(m_array.size());
             case Type::Integer64Array:
-            case Type::Float64Array: return static_cast<uint32_t>(m_array.size()) * 8;
+            case Type::Float64Array: return static_cast<uint32_t>(m_array.size());
             case Type::String:
             case Type::Raw: return static_cast<uint32_t>(m_raw.size());
             default: break;
@@ -586,7 +591,7 @@ namespace Fbx
             uint32_t numProperties = 0;
             uint32_t propertyListLen = 0;
             uint8_t nameLen = 0;
-            const size_t recordPos = file.tellg();
+            const size_t recordPos = static_cast<size_t>(file.tellg());
 
             file.read(reinterpret_cast<char*>(&endOffset), 4);
             file.read(reinterpret_cast<char*>(&numProperties), 4);
@@ -632,7 +637,6 @@ namespace Fbx
             recordStack.push(std::make_pair(pNewRecord, endOffset));
 
             // Read properties.
-            const size_t propertiesEndOffset = propertyListLen + file.tellg();
             size_t propertiesByteRead = 0;
             PropertyReader reader(file, pNewRecord);
 
@@ -658,7 +662,6 @@ namespace Fbx
             // Make sure all property bytes are extracted.
             if (propertiesByteRead != propertyListLen)
             {
-                size_t a = file.tellg();
                 throw std::runtime_error("Invalid property list length of record: " + pParentRecord->name());
             }
 
