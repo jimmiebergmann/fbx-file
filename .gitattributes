@@ -1,2 +1,2 @@
-miniz.h linguist-vendored=false
-miniz.c linguist-vendored=false
+miniz.h linguist-vendored=true
+miniz.c linguist-vendored=true
