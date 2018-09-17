@@ -15,10 +15,10 @@ addons:
 script:
   - cd test/googletest/googletest/make/
   - make
-  - cd ../../../
+  - cd ../../../../
   - make examples
   - make test
-  - cd ../bin/
+  - cd bin/
   - valgrind --leak-check=full --track-origins=yes --error-exitcode=1 ./test
 
 notifications:
