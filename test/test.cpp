@@ -1,5 +1,5 @@
 #include "gtest/gtest.h"
-#include "fbx.hpp"
+#include "../fbx.hpp"
 
 using namespace Fbx;
 

@@ -73,28 +73,28 @@
     <OutDir>..\bin\</OutDir>
     <IntDir>..\obj\x86\debug\test\</IntDir>
     <TargetName>test</TargetName>
-    <IncludePath>..\;..\test\googletest\googletest\include;$(IncludePath)</IncludePath>
+    <IncludePath>..\test\googletest\googletest\include;$(IncludePath)</IncludePath>
     <LibraryPath>..\test\googletest\googletest\msvc\2010\gtest\Win32-Debug;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <OutDir>..\bin\</OutDir>
     <IntDir>..\obj\x86\release\test\</IntDir>
     <TargetName>test</TargetName>
-    <IncludePath>..\;..\test\googletest\googletest\include;$(IncludePath)</IncludePath>
+    <IncludePath>..\test\googletest\googletest\include;$(IncludePath)</IncludePath>
     <LibraryPath>..\test\googletest\googletest\msvc\2010\gtest\Win32-Release;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <OutDir>..\bin\</OutDir>
     <IntDir>..\obj\x64\release\test\</IntDir>
     <TargetName>test</TargetName>
-    <IncludePath>..\;..\test\googletest\googletest\include;$(IncludePath)</IncludePath>
+    <IncludePath>..\test\googletest\googletest\include;$(IncludePath)</IncludePath>
     <LibraryPath>..\test\googletest\googletest\msvc\2010\gtest\x64-Release;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <OutDir>..\bin\</OutDir>
     <IntDir>..\obj\x64\debug\test\</IntDir>
     <TargetName>test</TargetName>
-    <IncludePath>..\;..\test\googletest\googletest\include;$(IncludePath)</IncludePath>
+    <IncludePath>..\test\googletest\googletest\include;$(IncludePath)</IncludePath>
     <LibraryPath>..\test\googletest\googletest\msvc\2010\gtest\x64-Debug;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
