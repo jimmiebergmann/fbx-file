@@ -24,10 +24,9 @@ file.write("../bin/blender-custom.fbx");
 ## Examples
 See [examples](https://github.com/jimmiebergmann/fbx-file/blob/master/examples).
 
-## Build
-##### Linux
+### Build
 ```
-$ make
+$ make examples
 ```
 ##### Windows
 Open builds/fbx.sln and compile solution.

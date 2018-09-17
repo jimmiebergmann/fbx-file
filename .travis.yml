@@ -16,7 +16,8 @@ script:
   - cd test/googletest/googletest/make/
   - make
   - cd ../../../
-  - make
+  - make examples
+  - make test
   - cd ../bin/
   - valgrind --leak-check=full --track-origins=yes --error-exitcode=1 ./test
 
