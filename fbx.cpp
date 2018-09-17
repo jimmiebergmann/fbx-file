@@ -116,17 +116,16 @@ namespace Fbx
                     return 4;
                 }
 
-                uint8_t * pData = new uint8_t[size];
-                m_file.read(reinterpret_cast<char*>(pData), size);
+                std::unique_ptr<uint8_t> data(new uint8_t[size]);
+                m_file.read(reinterpret_cast<char*>(data.get()), size);
 
                 switch (code)
                 {
-                case 'S': m_pRecord->properties().insert(new Property(std::string(pData, pData + size))); break;
-                case 'R': m_pRecord->properties().insert(new Property(pData, size)); break;
+                case 'S': m_pRecord->properties().insert(new Property(std::string(data.get(), data.get() + size))); break;
+                case 'R': m_pRecord->properties().insert(new Property(data.get(), size)); break;
                 default: throw std::runtime_error("Unkown raw property type:" + code); break;
                 }
 
-                delete[] pData;
                 return size + 4;
             }
 
@@ -145,11 +144,9 @@ namespace Fbx
             size_t readUncompressedArray(uint32_t arrayLength) const
             {
                 size_t size = arrayLength * sizeof(T);
-                T * pData = new T[size];
-                m_file.read(reinterpret_cast<char*>(pData), size);
-                m_pRecord->properties().insert(new Property(pData, arrayLength));
-
-                delete[] pData;
+                std::unique_ptr<T> data(new T[size]);
+                m_file.read(reinterpret_cast<char*>(data.get()), size);
+                m_pRecord->properties().insert(new Property(data.get(), arrayLength));
                 return size + 12;
             }
 
