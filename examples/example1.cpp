@@ -1,4 +1,4 @@
-#include "fbx.hpp"
+#include "../fbx.hpp"
 #include <iostream>
 
 void printRecord(const Fbx::Record * record, size_t level = 0)
