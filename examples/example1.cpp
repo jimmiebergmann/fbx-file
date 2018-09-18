@@ -15,14 +15,6 @@ void printRecord(const Fbx::Record * record, size_t level = 0)
     }
 }
 
-void printFile(const Fbx::Record & file)
-{
-    for(auto r : file)
-    {
-        printRecord(r);
-    }
-}
-
 int main()
 {
     Fbx::Record file;
@@ -39,7 +31,7 @@ int main()
     };
 
     file.read("../models/blender-default.fbx", versionCheck);
-    printFile(file);
+    //printRecord(&file);
     file.write("../bin/out-model.fbx");
 
     return 0;

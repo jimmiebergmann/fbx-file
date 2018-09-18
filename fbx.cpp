@@ -83,7 +83,7 @@ namespace Fbx
                     default: throw std::runtime_error("Unkown array property type:" + code); break;
                     }
                 }
-                if (encoding == 1)
+                else if (encoding == 1)
                 {
                     switch (code)
                     {
@@ -190,22 +190,55 @@ namespace Fbx
         template<typename T>
         void writeArray(std::vector<uint8_t> & data, const std::vector<Property::Value> & array)
         {
-            uint32_t arrayLength = static_cast<uint32_t>(array.size());
+            const uint32_t arrayLength = static_cast<uint32_t>(array.size());
+            const uint32_t arraySize = arrayLength * sizeof(T);
             const uint8_t * pArrayLength = reinterpret_cast<const uint8_t*>(&arrayLength);
-            uint32_t compressedLength = arrayLength * sizeof(T);
-            const uint8_t * pCompressedLength = reinterpret_cast<const uint8_t*>(&compressedLength);
-
+ 
             data.insert(data.end(), pArrayLength, pArrayLength + 4);
             data.insert(data.end(), 4, 0);
-            data.insert(data.end(), pCompressedLength, pCompressedLength + 4);
+            data.insert(data.end(), 4, 0);
 
-            for (uint32_t i = 0; i < arrayLength; i++)
+            if (arraySize != 0)
             {
-                const uint8_t * pValue = reinterpret_cast<const uint8_t*> (&array[i].boolean);
-                data.insert(data.end(), pValue, pValue + sizeof(T));
+                std::vector<uint8_t> * pBytes = new std::vector<uint8_t>();
+                for (uint32_t i = 0; i < arrayLength; i++)
+                {
+                    const uint8_t * pValue = reinterpret_cast<const uint8_t*> (&array[i].boolean);
+                    pBytes->insert(pBytes->end(), pValue, pValue + sizeof(T));
+                }
+
+                uint32_t compressedLength = static_cast<uint32_t>(pBytes->size());
+                uint32_t encoding = 0;
+                if (arraySize > 127)
+                {
+                    std::vector<uint8_t> * pCompressedBytes = new std::vector<uint8_t>(pBytes->begin(), pBytes->end());
+
+                    mz_ulong destLength = static_cast<mz_ulong>(pBytes->size());
+                    int status = 0;
+                    if ((status = compress(&(*pCompressedBytes)[0], &destLength, &(*pBytes)[0], destLength)) == MZ_OK)
+                    {
+                        delete pBytes;
+                        pBytes = pCompressedBytes;
+                        compressedLength = static_cast<uint32_t>(destLength);
+                        encoding = 1;
+                    }
+                    else
+                    {
+                        delete pCompressedBytes;
+                    }
+                }
+
+                const uint8_t * pCompressedLength = reinterpret_cast<const uint8_t*>(&compressedLength);
+                const uint8_t * pArrayLength = reinterpret_cast<const uint8_t*>(&arrayLength);
+                const uint8_t * pEncoding = reinterpret_cast<const uint8_t*>(&encoding);
+
+                memcpy(&data[data.size() - 8], pEncoding, 4);
+                memcpy(&data[data.size() - 4], pCompressedLength, 4);
+                data.insert(data.end(), &(*pBytes)[0], &(*pBytes)[0] + compressedLength);
+
+                delete pBytes;
             }
         }
-
     }
 
 
