@@ -829,6 +829,33 @@ namespace Fbx
             
         }
 
+        // Valid only for when CreationTime is 1970-01-01 10:00:00:000 
+        std::array<uint8_t, 16> footId{
+            0xFA, 0xBC, 0xAB, 0x09, 0xD0, 0xC8, 0xD4, 0x66, 
+            0xB1, 0x76, 0xFB, 0x83, 0x1C, 0xF7, 0x26, 0x7E
+        };
+        data.insert(data.end(), footId.begin(), footId.end());
+        data.insert(data.end(), 4, 0);
+
+        // Padding for alignment (values between 1 & 16 observed)
+        // If already aligned to 16, add a full 16 bytes padding
+        size_t pad = ((data.size() + 15) & ~15) - data.size();
+        if (pad == 0)
+        {
+            pad = 16;
+        }
+        data.insert(data.end(), pad, 0);
+
+        data.insert(data.end(), pVersion, pVersion + 4);
+        data.insert(data.end(), 120, 0);
+
+        // Unknown magic (always the same)
+        std::array<uint8_t, 16> unknownMagic{
+            0xF8, 0x5A, 0x8C, 0x6A, 0xDE, 0xF5, 0xD9, 0x7E, 
+            0xEC, 0xE9, 0x0C, 0xE3, 0x75, 0x8F, 0x29, 0x0B
+        };
+        data.insert(data.end(), unknownMagic.begin(), unknownMagic.end());
+
         file.write(reinterpret_cast<const char*>(&data[0]), data.size());
     }
 
